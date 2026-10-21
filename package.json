@@ -1,0 +1,28 @@
+{
+  "name": "inkisle",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:production": "playwright test --config playwright.production.config.ts",
+    "benchmark": "playwright test tests/e2e/performance.spec.ts",
+    "package:win:lite": "node scripts/package-windows.mjs lite",
+    "package:win:offline": "node scripts/package-windows.mjs offline",
+    "package:win": "node scripts/package-windows.mjs lite offline",
+    "test:windows": "node scripts/test-windows.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.20.5",
+    "fake-indexeddb": "^6.2.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
+  }
+}
