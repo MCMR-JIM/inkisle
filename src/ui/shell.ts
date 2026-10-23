@@ -33,7 +33,7 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
     <div class="toolbar panel" role="toolbar" aria-label="白板工具">
       ${TOOL_FAMILIES.map((family, i) => `${i === 3 || i === 5 ? '<span class="tool-separator"></span>' : ''}${familyButtonMarkup(family)}`).join('')}
       ${TOOL_FAMILIES.map(familyMenuMarkup).join('')}
-      <div id="pressure-setting" class="pen-options panel" role="group" aria-label="画笔选项" hidden><label id="pressure-label" for="pressure-toggle">压感</label><button id="pressure-toggle" class="pressure-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="pressure-label" data-tooltip="手写笔感应力度，鼠标慢画粗、快画细"><span></span></button></div>
+      <div id="pressure-setting" class="pen-options panel" role="group" aria-label="画笔选项" hidden><div class="pen-modes" role="group" aria-label="笔类型"><button type="button" data-pen-mode="pen" aria-label="普通画笔" aria-pressed="true">${icon('pen', 16)}画笔</button><button type="button" data-pen-mode="highlighter" aria-label="荧光笔" aria-pressed="false">${icon('highlighter', 16)}荧光笔</button></div><label id="pressure-label" for="pressure-toggle">压感</label><button id="pressure-toggle" class="pressure-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="pressure-label" data-tooltip="手写笔感应力度，鼠标慢画粗、快画细"><span></span></button></div>
     </div>
     <aside id="properties" class="properties panel" aria-label="样式设置">
       <div class="panel-heading"><span>${icon('settings', 16)}<span id="property-title">样式设置</span></span><button id="collapse-properties" class="tiny-button" aria-label="收起样式">${icon('minus', 15)}</button></div>

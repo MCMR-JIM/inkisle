@@ -23,6 +23,8 @@ Clicking a shape or line category immediately activates its last-used child, def
 
 Selecting the pen by clicking or pressing **P** opens pressure options beside the toolbar. Selecting existing ink also exposes pressure editing. The left style panel keeps a fixed title and control layout across tools and selections.
 
+The pen popover includes **Pen / Highlighter**. Highlighter defaults to yellow, a 20-unit width and 35% opacity, with uniform width. Its color, width and opacity can be adjusted through the existing style controls. Switching to ordinary pen or another tool restores the previous settings. The chosen pen mode is remembered locally; highlighter strokes support normal selection, erasing, undo and file/image export.
+
 On small screens, tools and shape options use multiple rows with larger touch targets.
 
 ## Board library

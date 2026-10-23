@@ -3,6 +3,20 @@ import { chooseTool, contextAction } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
 
+test('production highlighter draws wide translucent ink and restores ordinary pen settings', async ({ page }) => {
+  await page.goto('/'); await page.locator('#quick-new').click();
+  await expect(page.locator('#board-title')).toHaveValue('未命名画板'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.keyboard.press('p'); await page.getByRole('button', { name: '荧光笔', exact: true }).click();
+  await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(750, 300, { steps: 8 }); await page.mouse.up();
+  await page.getByRole('button', { name: '普通画笔', exact: true }).click();
+  await page.mouse.move(500, 450); await page.mouse.down(); await page.mouse.move(750, 450, { steps: 8 }); await page.mouse.up();
+  const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
+  const { readFile } = await import('node:fs/promises'); const doc = decodeDocument(new Uint8Array(await readFile((await download.path())!)));
+  expect(doc.elements).toHaveLength(2);
+  expect(doc.elements[0]).toMatchObject({ kind: 'pen', stroke: '#f2d64b', strokeWidth: 20, opacity: .35, pressureEnabled: false });
+  expect(doc.elements[1]).toMatchObject({ kind: 'pen', strokeWidth: 2, opacity: 1, pressureEnabled: true });
+});
+
 test('production assets boot and render without development modules or runtime errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));

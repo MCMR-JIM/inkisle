@@ -2,6 +2,7 @@ const paths: Record<string, string> = {
   select: '<path d="m5 3 14 9-6 1.5L10 20Z"/>',
   hand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v6c0 4-3 6-6 6h-1c-2 0-3-1-4-2l-4-5a1.5 1.5 0 0 1 2-2l2 2"/>',
   pen: '<path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z"/>',
+  highlighter: '<path d="m9 11 6 6 6-8-6-6-6 8ZM9 11l-4 4 4 4 6-2M5 15l-2 6h6M3 21h10"/>',
   rect: '<rect x="4" y="5" width="16" height="14"/>',
   roundrect: '<rect x="4" y="5" width="16" height="14" rx="4"/>',
   recognize: '<path d="M4 15c-3-7 6-13 12-10 6 3 4 12-2 14-4 1-7-1-8-3"/><path d="m15 14 5 6m-1-9 3-1M11 21l1-3"/>',

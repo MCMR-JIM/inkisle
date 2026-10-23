@@ -56,6 +56,9 @@ kbd { font-family: inherit; font-size: 10px; font-weight: 400; white-space: nowr
 .tool-key { position: absolute; right: 3px; bottom: 1px; font-size: 7px; opacity: .65; }
 .family-button { overflow: visible; }
 .pen-options { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 18; display: flex; align-items: center; gap: 14px; width: max-content; padding: 10px 14px; border-radius: 10px; font-size: 12px; color: var(--label); }
+.pen-modes { display: flex; gap: 3px; padding: 3px; border-radius: 8px; background: var(--surface-soft); }
+.pen-modes button { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 6px 8px; border-radius: 6px; font-size: 11px; white-space: nowrap; }
+.pen-modes button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .tool-submenu { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 18; display: flex; flex-wrap: nowrap; align-items: center; gap: 3px; width: max-content; max-width: calc(100vw - 24px); padding: 6px; border-radius: 13px; }
 .tool-submenu button { position: relative; flex: 0 1 49px; width: 49px; min-width: 0; height: 44px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 8px; font-size: 9px; white-space: nowrap; }
 .tool-submenu button:hover, .tool-submenu button:focus-visible, .tool-submenu button.active { background: var(--accent-soft); color: var(--accent); outline: none; }
@@ -170,7 +173,7 @@ dialog { color: var(--ink); border: 1px solid var(--border); background: var(--s
 :root[data-toolbar-position="bottom"] .toolbar { top: auto; bottom: 82px; }
 :root[data-toolbar-position="bottom"] .tool-submenu { top: auto; bottom: calc(100% + 8px); }
 :root[data-toolbar-position="bottom"] .pen-options { top: auto; bottom: calc(100% + 8px); }
-:root[data-toolbar-position="bottom"]:has(.pen-options:not([hidden])) .toast { bottom: 210px; }
+:root[data-toolbar-position="bottom"]:has(.pen-options:not([hidden])) .toast { bottom: 222px; }
 :root[data-toolbar-position="bottom"] .toast { bottom: 154px; }
 .group-navigation { position: absolute; top: 188px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; border-radius: 10px; font-size: 11px; max-width: calc(100vw - 24px); }
 :root[data-toolbar-position="bottom"] .group-navigation { top: 78px; }
@@ -207,7 +210,8 @@ dialog { color: var(--ink); border: 1px solid var(--border); background: var(--s
   .tool-submenu button { width: 100%; height: 48px; font-size: 10px; }
   :root[data-toolbar-position="bottom"] .toolbar { bottom: 76px; }
   :root[data-toolbar-position="bottom"] .toast { bottom: 194px; }
-  :root[data-toolbar-position="bottom"]:has(.pen-options:not([hidden])) .toast { bottom: 250px; }
+  :root[data-toolbar-position="bottom"]:has(.pen-options:not([hidden])) .toast { bottom: 274px; }
+  .pen-modes button { min-height: 44px; }
   .group-navigation { top: 286px; }
   .library-search { padding-inline: 22px; flex-wrap: wrap; }
   .library-search input { flex-basis: 160px; }

@@ -30,6 +30,7 @@ import { alignmentChanges, cloneGroupPaths, groupChanges, inScope, selectedUnits
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
+const penStyle = (styles: Partial<BoardElement>): Partial<BoardElement> => ({ stroke: styles.stroke, strokeWidth: styles.strokeWidth, opacity: styles.opacity, dash: styles.dash, pressureEnabled: styles.pressureEnabled });
 
 export class App {
   private codec = new SnapshotCodec();
@@ -56,6 +57,9 @@ export class App {
   private libraryMutation: Promise<void> = Promise.resolve();
   private toolFamilies = new ToolFamilyController(tool => this.setTool(tool));
   private familyTools = new Map<string, Tool>();
+  private penMode: 'pen' | 'highlighter' = readPreference('pen-mode') === 'highlighter' ? 'highlighter' : 'pen';
+  private ordinaryPenStyle: Partial<BoardElement> | null = null;
+  private highlighterStyle: Partial<BoardElement> = { stroke: '#f2d64b', strokeWidth: 20, opacity: .35, dash: false, pressureEnabled: false };
   private startup = performance.now();
   private startupPhases: Record<string, number> = {};
   private firstSceneFrameMs = 0;
@@ -208,6 +212,8 @@ export class App {
     });
     document.addEventListener('click', event => {
       const target = event.target as HTMLElement;
+      const penMode = target.closest<HTMLElement>('[data-pen-mode]')?.dataset.penMode;
+      if (penMode === 'pen' || penMode === 'highlighter') { this.penMode = penMode; writePreference('pen-mode', penMode); this.setTool('pen'); return; }
       const familyElement = target.closest<HTMLElement>('[data-family]');
       if (familyElement) { this.toggleToolFamily(familyElement.dataset.family!, familyElement); return; }
       const childElement = target.closest<HTMLElement>('[data-tool-child]');
@@ -243,6 +249,10 @@ export class App {
     on('zoom-out', () => this.zoom(this.renderer.state.camera.zoom / 1.25)); on('zoom-in', () => this.zoom(this.renderer.state.camera.zoom * 1.25));
     on('zoom-value', () => this.zoom(1)); on('fit-button', () => this.fit());
     on('fill-toggle', () => this.toggleFill());
+    $('#pressure-setting').addEventListener('keydown', event => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('[data-pen-mode]');
+      if (button && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); button.click(); }
+    });
     on('pressure-toggle', () => {
       const pressure = $('#pressure-toggle').getAttribute('aria-checked') !== 'true';
       this.styles.pressureEnabled = pressure; writePreference('pressure', String(pressure));
@@ -301,6 +311,7 @@ export class App {
   setTool(tool: Tool): void {
     if (tool === 'image') { $('#image-file').click(); return; }
     this.interaction?.finishEditing();
+    this.syncPenProfile(tool === 'pen' && this.penMode === 'highlighter');
     this.renderer.state.tool = tool;
     if (tool !== 'select') this.renderer.state.selected.clear();
     const family = familyForTool(tool);
@@ -308,6 +319,14 @@ export class App {
     if (family.children?.length || family.id === 'pen') this.toolFamilies.open(family.id); else this.toolFamilies.close();
     this.renderToolState();
     this.interaction?.updateCursor(); this.renderer.invalidate(false); this.selectionChanged();
+  }
+
+  private syncPenProfile(highlighter: boolean): void {
+    if (highlighter && !this.ordinaryPenStyle) {
+      this.ordinaryPenStyle = penStyle(this.styles); Object.assign(this.styles, this.highlighterStyle);
+    } else if (!highlighter && this.ordinaryPenStyle) {
+      this.highlighterStyle = penStyle(this.styles); Object.assign(this.styles, this.ordinaryPenStyle); this.ordinaryPenStyle = null;
+    }
   }
 
   private toggleToolFamily(id: string, button: HTMLElement): void {
@@ -356,6 +375,7 @@ export class App {
     const otherMenu = TOOL_FAMILIES.some(family => family.children?.length && this.toolFamilies.isOpen(family.id));
     const open = !otherMenu && (inkSelected || (this.renderer.state.tool === 'pen' && this.toolFamilies.isOpen('pen')));
     $('#pressure-setting').hidden = !open;
+    document.querySelectorAll<HTMLElement>('[data-pen-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.penMode === this.penMode)));
     document.querySelector('[data-family="pen"]')?.setAttribute('aria-expanded', String(open));
   }
 
@@ -389,7 +409,7 @@ export class App {
     $<HTMLButtonElement>('#fill-toggle').disabled = !!elements.length && elements.every(el => el.locked);
     this.updatePenOptions();
     $('#pressure-toggle').setAttribute('aria-checked', String(first ? !!first.pressureEnabled : this.styles.pressureEnabled !== false));
-    $<HTMLButtonElement>('#pressure-toggle').disabled = !!elements.length && elements.every(el => el.locked);
+    $<HTMLButtonElement>('#pressure-toggle').disabled = (!!elements.length && elements.every(el => el.locked)) || (this.renderer.state.tool === 'pen' && this.penMode === 'highlighter');
     document.querySelectorAll<HTMLElement>('[data-color-index]').forEach(button => {
       const active = button.dataset.color === (button.dataset.property === 'fill' ? fillColor : style.stroke); button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
     });
