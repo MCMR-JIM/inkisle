@@ -86,12 +86,13 @@ test('open contours and single clicks never remain as pen objects in shape recog
   expect(elements[1].kind).toBe('ellipse'); expect(elements[1].points).toHaveLength(0);
 });
 
-test('all eight shape options fit a single centered row on small screens', async ({ page }) => {
+test('all eight shape options fit two touch-friendly rows on small screens', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/'); await page.locator('[data-family="shapes"]').click();
   const menu = page.locator('#tool-menu-shapes'), box = (await menu.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(8); expect(box.x + box.width).toBeLessThanOrEqual(382);
   const children = await menu.locator('[data-tool-child]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
-  expect(children).toHaveLength(8); expect(Math.max(...children.map(b => b.y)) - Math.min(...children.map(b => b.y))).toBeLessThan(1);
+  expect(children).toHaveLength(8); expect(new Set(children.map(b => b.y)).size).toBe(2);
+  expect(children.every(b => b.width >= 44 && b.height >= 44)).toBe(true);
   for (const child of children) expect(child.x + child.width).toBeLessThanOrEqual(382);
 });
 

@@ -92,6 +92,8 @@ test('erased overlap is a union, follows the object and does not erase future in
   await page.mouse.move(550, 400); await page.mouse.down(); await page.mouse.move(650, 450); await page.mouse.up();
   expect((await pixels(page, [[750, 420]]))[0].slice(0, 3)).toEqual([248, 249, 246]);
   await chooseTool(page, '画笔');
+  // Isolate erasure from timing-dependent mouse pressure and antialiasing.
+  await page.locator('#pressure-toggle').click();
   await page.mouse.move(700, 420); await page.mouse.down(); await page.mouse.move(800, 420); await page.mouse.up();
   expect((await pixels(page, [[750, 420]]))[0][0]).toBeLessThan(100);
   await expect(page.locator('#element-count')).toHaveText('2 个元素');

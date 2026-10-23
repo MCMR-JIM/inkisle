@@ -104,7 +104,7 @@ test('cancel rolls back the live preset without saving it or changing a locked s
 
 test('palette and toolbar explanations share an unclipped tooltip without inline helper text', async ({ page }) => {
   await blank(page); await page.locator('[data-family="shapes"]').hover();
-  await expect(page.getByRole('tooltip')).toHaveText('图形');
+  await expect(page.getByRole('tooltip')).toHaveText(/图形.*Shift.*R/);
   await page.locator('#stroke-palette').click(); await page.locator('#stroke-hex').fill('#123456');
   await page.locator('#stroke-picker .color-preview').hover(); await expect(page.getByRole('tooltip')).toHaveText(/上方是原色/);
   await page.locator('#stroke-picker').getByRole('button', { name: '取消', exact: true }).click();

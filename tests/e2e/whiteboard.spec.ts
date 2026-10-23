@@ -143,6 +143,7 @@ test('exports valid PNG and SVG assets and supports image insertion', async ({ p
   const svgPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).click();
   await page.locator('[data-action="export-svg"]').click();
+  await page.locator('#confirm-export').click();
   const svg = await svgPromise;
   const stream = await svg.createReadStream();
   const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
@@ -156,6 +157,7 @@ test('exports valid PNG and SVG assets and supports image insertion', async ({ p
   const pngPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).click();
   await page.locator('[data-action="export-png"]').click();
+  await page.locator('#confirm-export').click();
   const png = await pngPromise;
   expect(png.suggestedFilename()).toMatch(/\.png$/);
 });

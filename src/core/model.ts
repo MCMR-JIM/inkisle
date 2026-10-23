@@ -34,6 +34,8 @@ export interface BoardElement extends Bounds {
   path?: PathGeometry;
   /** Optional local vertices for a recognized scalene triangle. */
   vertices?: Point[];
+  /** Stable group ancestry, ordered from the outermost to the innermost group. */
+  groupPath?: string[];
 }
 
 export interface BoardDocument {

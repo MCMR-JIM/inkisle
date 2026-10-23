@@ -38,6 +38,7 @@ export class ToolFamilyController {
   constructor(private onChoose: (tool: Tool) => void) {}
   toggle(family: string): void { this.openFamily = this.openFamily === family ? null : family; }
   close(): void { this.openFamily = null; }
+  open(family: string): void { this.openFamily = family; }
   isOpen(family: string): boolean { return this.openFamily === family; }
   choose(tool: Tool): void { this.onChoose(tool); }
 }

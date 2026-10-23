@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { chooseTool } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
+import { decodeDocument } from '../../src/core/codec';
 
 test('production assets boot and render without development modules or runtime errors', async ({ page }) => {
   const errors: string[] = [];
@@ -10,7 +11,7 @@ test('production assets boot and render without development modules or runtime e
   await expect(page.locator('#element-count')).toHaveText('21 个元素');
   await expect(page.locator('.toolbar .family-caret')).toHaveCount(0);
   expect(await page.locator('#quick-new').evaluate(el => el.nextElementSibling?.id)).toBe('theme-button');
-  expect((await page.locator('.toolbar').boundingBox())!.y).toBeLessThanOrEqual(64);
+  expect((await page.locator('.toolbar').boundingBox())!.y).toBeGreaterThan(700);
   expect(await page.locator('.toolbar .tool-key').evaluateAll(nodes => nodes.filter(el => el.textContent?.trim()).every(el => Number(getComputedStyle(el).opacity) > .5))).toBe(true);
   await page.waitForFunction(() => (window as unknown as { inkisle: { diagnostics: () => { firstSceneFrameMs: number } } }).inkisle.diagnostics().firstSceneFrameMs > 0);
   expect(errors).toEqual([]);
@@ -44,6 +45,31 @@ test('production assets boot and render without development modules or runtime e
   await expect(page.locator('#toast')).toContainText('画板已导入');
   await expect(page.locator('#element-count')).toHaveText('512 个元素');
   expect(errors).toEqual([]);
+});
+
+test('production nested groups retain independent identities through worker export, import and reopening', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await chooseTool(page, '矩形');
+  for (const x of [450, 650, 900]) { await page.mouse.move(x, 300); await page.mouse.down(); await page.mouse.move(x + 80, 360); await page.mouse.up(); }
+  await chooseTool(page, '选择工具'); await page.mouse.click(490, 300);
+  await page.keyboard.down('Shift'); await page.mouse.click(690, 300); await page.keyboard.up('Shift');
+  await page.keyboard.press('Control+g');
+  await page.keyboard.down('Shift'); await page.mouse.click(940, 300); await page.keyboard.up('Shift');
+  await page.keyboard.press('Control+g');
+  for (let i = 0; i < 8; i++) { await page.keyboard.press('Control+a'); await page.keyboard.press('Control+d'); }
+  await expect(page.locator('#element-count')).toHaveText('768 个元素');
+  const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await pending;
+  const stream = await download.createReadStream(); const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
+  const doc = decodeDocument(Buffer.concat(chunks));
+  expect(new Set(doc.elements.map(el => el.groupPath![0])).size).toBe(256);
+  expect(doc.elements.filter(el => el.groupPath?.length === 2)).toHaveLength(512);
+  await page.locator('#import-file').setInputFiles((await download.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
+  await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.reload(); await expect(page.locator('#element-count')).toHaveText('768 个元素');
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Control+Shift+g');
+  await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.keyboard.press('Control+z'); await expect(page.locator('#element-count')).toHaveText('768 个元素');
 });
 
 test('production custom selector and local erasure remain functional after reopening', async ({ page }) => {

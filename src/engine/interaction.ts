@@ -1,5 +1,5 @@
 import { createElement, type BoardElement, type Bounds, type Camera, type Change, type Point, type Tool } from '../core/model';
-import { containsBounds, elementBounds, expandBounds, hitTest, normalizeBounds, screenToWorld, simplifyPoints, unionBounds, zoomAt } from '../core/geometry';
+import { containsBounds, expandBounds, hitTest, normalizeBounds, screenToWorld, simplifyPoints, unionBounds, zoomAt } from '../core/geometry';
 import { Renderer } from './renderer';
 import { CANVAS_FONT, wrapText } from './draw';
 import { eraseAt, erasureBounds, scaleErasures } from '../core/erasure';
@@ -12,6 +12,7 @@ import { recognizeShape } from '../core/recognition';
 import { wheelZoom } from '../core/camera';
 import { PressureSampler, pressureValue } from '../core/pressure';
 import { simplifyInk } from '../core/ink';
+import { inScope, selectionUnits, selectedUnits } from '../core/groups';
 
 export interface InteractionHost {
   renderer: Renderer;
@@ -79,6 +80,35 @@ export class Interaction {
   get hasPendingGeometry(): boolean { return this.pendingCuts.size > 0; }
   async settle(): Promise<void> { await Promise.all(this.pendingCuts); }
 
+  selectElement(element: BoardElement, additive = false, deep = false): void {
+    if (deep) this.r.state.groupScope = element.groupPath?.slice() ?? [];
+    if (!inScope(element, this.r.state.groupScope ?? [])) { this.r.state.groupScope = []; this.r.state.selected.clear(); }
+    const unit = selectionUnits(this.r.scene.elements, this.r.state.groupScope ?? []).find(unit => unit.elements.some(el => el.id === element.id));
+    if (!unit) return;
+    if (additive) {
+      const remove = unit.elements.every(el => this.r.state.selected.has(el.id));
+      for (const el of unit.elements) if (remove) this.r.state.selected.delete(el.id); else this.r.state.selected.add(el.id);
+    } else if (deep || !unit.elements.every(el => this.r.state.selected.has(el.id))) this.r.state.selected = new Set(unit.elements.map(el => el.id));
+    this.host.onSelection(); this.r.invalidate(false);
+  }
+
+  exitGroup(): boolean {
+    const scope = this.r.state.groupScope ?? [];
+    if (!scope.length) return false;
+    this.finishEditing(); this.cancel(); this.r.state.groupScope = scope.slice(0, -1);
+    this.r.state.selected = new Set(this.r.scene.elements.filter(el => inScope(el, scope)).map(el => el.id));
+    this.host.onSelection(); return true;
+  }
+
+  private enterGroup(element: BoardElement): boolean {
+    const scope = this.r.state.groupScope ?? [];
+    if (!inScope(element, scope) || !element.groupPath?.[scope.length]) return false;
+    this.finishEditing(); this.cancel();
+    this.r.state.groupScope = element.groupPath.slice(0, scope.length + 1);
+    this.r.state.selected.clear(); this.selectElement(element);
+    return true;
+  }
+
   private point(e: { clientX: number; clientY: number }): Point {
     const rect = this.r.interactionCanvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -134,11 +164,8 @@ export class Interaction {
       }
       const hit = this.hit(world);
       if (hit) {
-        if (e.shiftKey) {
-          if (this.r.state.selected.has(hit.id)) this.r.state.selected.delete(hit.id);
-          else this.r.state.selected.add(hit.id);
-        } else if (!this.r.state.selected.has(hit.id)) this.r.state.selected = new Set([hit.id]);
-        const originals = [...this.r.state.selected].map(id => this.r.scene.get(id)).filter((el): el is BoardElement => !!el && !el.locked);
+        this.selectElement(hit, e.shiftKey, e.ctrlKey || e.metaKey);
+        const originals = selectedUnits(this.r.scene.elements, this.r.state.selected, this.r.state.groupScope ?? []).filter(unit => !unit.elements.some(el => el.locked)).flatMap(unit => unit.elements);
         if (originals.length) this.gesture = { type: 'move', start: world, originals };
       } else {
         const previous = e.shiftKey ? new Set(this.r.state.selected) : new Set<string>();
@@ -152,13 +179,13 @@ export class Interaction {
     }
     if (tool === 'image') return;
     if (tool === 'text' || tool === 'note') {
-      const el = createElement(tool, { ...this.host.styles, x: world.x, y: world.y, w: tool === 'note' ? 230 : 320, h: tool === 'note' ? 200 : 45, ...(tool === 'note' ? { fontSize: 20 } : {}) });
+      const el = createElement(tool, { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, w: tool === 'note' ? 230 : 320, h: tool === 'note' ? 200 : 45, ...(tool === 'note' ? { fontSize: 20 } : {}) });
       this.editText(el, true); return;
     }
     const ink = tool === 'pen' || tool === 'recognize';
     const pressure = tool === 'pen' && this.host.styles.pressureEnabled !== false && (e.pointerType === 'pen' || e.pointerType === 'mouse');
     const sampler = pressure ? new PressureSampler(e.pointerType, { x: screen.x, y: screen.y, time: e.timeStamp, pressure: e.pressure }) : undefined;
-    const element = createElement(tool === 'recognize' ? 'pen' : tool, { ...this.host.styles, x: world.x, y: world.y, ...(ink ? { pressureEnabled: pressure } : {}), points: ink ? [{ x: 0, y: 0, pressure: sampler?.value ?? pressureValue(e.pressure) }] : [] });
+    const element = createElement(tool === 'recognize' ? 'pen' : tool, { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, ...(ink ? { pressureEnabled: pressure } : {}), points: ink ? [{ x: 0, y: 0, pressure: sampler?.value ?? pressureValue(e.pressure) }] : [] });
     this.r.state.selected.clear();
     this.gesture = { type: 'draw', start: world, element, recognize: tool === 'recognize', sampler, pointerId: e.pointerId };
     this.r.state.preview = [element]; this.r.invalidate(false);
@@ -268,7 +295,7 @@ export class Interaction {
     } else if (g.type === 'marquee') {
       const b = normalizeBounds({ ...g.start, w: world.x - g.start.x, h: world.y - g.start.y });
       this.r.state.marquee = b;
-      this.r.state.selected = new Set([...g.previous, ...this.r.scene.query(b).filter(el => containsBounds(b, elementBounds(el))).map(el => el.id)]);
+      this.r.state.selected = new Set([...g.previous, ...selectionUnits(this.r.scene.elements, this.r.state.groupScope ?? []).filter(unit => containsBounds(b, unit.bounds)).flatMap(unit => unit.elements.map(el => el.id))]);
     } else if (g.type === 'erase') { this.erase(world); return; }
     this.r.invalidate(false);
   }
@@ -356,12 +383,16 @@ export class Interaction {
     if (this.r.state.tool !== 'select') return;
     const world = screenToWorld(this.point(e), this.r.state.camera);
     const el = this.hit(world);
+    if (el && this.enterGroup(el)) return;
     if (el && !el.locked && ['text', 'note', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) this.editText(el);
-    else if (!el) this.editText(createElement('text', { ...this.host.styles, x: world.x, y: world.y, w: 320, h: 45 }), true);
+    else if (!el) this.editText(createElement('text', { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, w: 320, h: 45 }), true);
   }
 
   editSelected(): void {
+    const units = selectedUnits(this.r.scene.elements, this.r.state.selected, this.r.state.groupScope ?? []);
+    if (units.length !== 1) return;
     const el = this.r.scene.get([...this.r.state.selected][0]);
+    if (el && this.enterGroup(el)) return;
     if (el && !el.locked && ['text', 'note', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) this.editText(el);
   }
 
