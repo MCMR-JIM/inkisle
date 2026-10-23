@@ -593,16 +593,19 @@ export class App {
   }
 
   private async addImage(file: File, screen = { x: this.renderer.width / 2, y: this.renderer.height / 2 }): Promise<void> {
+    const scene = this.scene;
+    const point = screenToWorld(screen, this.renderer.state.camera);
     try {
       if (file.size > 15 * 1024 * 1024) throw new Error('请选择 15 MB 以内的图片');
       if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(file.type)) throw new Error('支持 PNG、JPEG、WebP、GIF 和 AVIF 图片');
       const src = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.onerror = () => reject(new Error('图片读取失败')); reader.readAsDataURL(file); });
       const image = new Image(); image.src = src; await image.decode();
+      // Reloading the same board also replaces its scene and invalidates this import.
+      if (this.scene !== scene) { this.toast('画板已切换，请重新插入图片'); return; }
       const scale = Math.min(1, 600 / image.naturalWidth, 500 / image.naturalHeight);
       const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
-      const point = screenToWorld(screen, this.renderer.state.camera);
       const el = createElement('image', { x: point.x - w / 2, y: point.y - h / 2, w, h, src, strokeWidth: 0, radius: 8 });
-      this.scene.apply([{ id: el.id, after: el }], '插入图片');
+      scene.apply([{ id: el.id, after: el }], '插入图片');
       this.renderer.state.selected.clear(); this.selectionChanged();
     } catch (error) { this.toast(message(error)); }
   }
