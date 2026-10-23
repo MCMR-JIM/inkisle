@@ -9,6 +9,7 @@
 - Inside a group, click to select an individual object, or Shift-click / marquee to select several children. Single objects retain resize and rotation controls; multiple objects can only move.
 - Press **Esc** or click **Exit one level** to leave the current group. **Ctrl-click** directly selects an individual descendant.
 - Alignment and equal spacing treat a selected group as one unit. Operations within a group affect its children. Layer actions preserve group boundaries.
+- Group, ungroup and alignment commands appear in a compact toolbar near the selection. Open **Alignment and spacing** for the alignment commands. The existing left style panel keeps its original controls and order.
 - Grouping, ungrouping, moving, alignment and child edits participate in undo/redo. Source files, clipboard copies and board copies preserve nesting. Copies receive independent group identities.
 
 ## Tool placement and shortcuts

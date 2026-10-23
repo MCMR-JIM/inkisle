@@ -25,6 +25,7 @@ import { bindTooltips } from './ui/tooltip';
 import { layerChanges, type LayerAction } from './core/layers';
 import { selectedFill, setFillColor, setFillEnabled } from './core/fill';
 import { PRODUCT, isBoardFile, isElementClipboard, readPreference, writePreference } from './core/product';
+import { SelectionToolbar } from './ui/selection-toolbar';
 import { alignmentChanges, cloneGroupPaths, groupChanges, inScope, selectedUnits, ungroupChanges, type Alignment } from './core/groups';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -37,6 +38,7 @@ export class App {
   private scene = new Scene();
   renderer: Renderer;
   private interaction: Interaction;
+  private selectionToolbar: SelectionToolbar;
   private fontSize: CustomSelect;
   private shortcuts = new ShortcutMap(readPreference('shortcuts'));
   private shortcutSettings: ShortcutSettings;
@@ -62,7 +64,6 @@ export class App {
   constructor(root: HTMLElement) {
     if (readPreference('fill-enabled') === 'true') this.styles.fill = this.styles.fillColor;
     buildShell(root, this.palettes);
-    $('#property-content').prepend($('#selection-actions'));
     const position = readPreference('toolbar-position') === 'top' ? 'top' : 'bottom';
     document.documentElement.dataset.toolbarPosition = position;
     $<HTMLSelectElement>('#toolbar-position').value = position;
@@ -72,10 +73,11 @@ export class App {
     const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map() };
     document.documentElement.dataset.theme = state.dark ? 'dark' : 'light';
     this.renderer = new Renderer(this.scene, $('#canvas'), $('#interaction-canvas'), state);
+    this.selectionToolbar = new SelectionToolbar(this.renderer);
     this.renderer.onFrame = () => {
-      if (!this.ready) return;
+      this.selectionToolbar.update();
+      if (!this.ready || this.firstSceneFrameMs) return;
       this.firstSceneFrameMs = performance.now() - this.startup;
-      this.renderer.onFrame = undefined;
     };
     this.interaction = this.createInteraction();
     this.colorPickers = {
@@ -362,6 +364,8 @@ export class App {
     if (units.some(unit => unit.group)) $('#selection-label').textContent = `已选择 ${units.length} 个对象 · ${elements.length} 个元素`;
     $<HTMLButtonElement>('#group-button').disabled = units.length < 2 || elements.some(el => el.locked || (el.groupPath?.length ?? 0) >= 32);
     $<HTMLButtonElement>('#ungroup-button').disabled = !units.some(unit => unit.group && !unit.elements.some(el => el.locked));
+    for (const id of ['group-button', 'ungroup-button']) $(`#${id}`).hidden = $<HTMLButtonElement>(`#${id}`).disabled;
+    $('#alignment-trigger').hidden = units.filter(unit => !unit.elements.some(el => el.locked)).length < 2;
     document.querySelectorAll<HTMLButtonElement>('[data-align]').forEach(button => { button.disabled = units.filter(unit => !unit.elements.some(el => el.locked)).length < (['horizontal', 'vertical'].includes(button.dataset.align!) ? 3 : 2); });
     $('#group-navigation').hidden = !scope.length;
     $('#group-scope-label').textContent = `组合内 · 第 ${scope.length} 层`;
@@ -722,7 +726,7 @@ export class App {
     this.updateThemeIcon(); this.renderer.invalidate();
   }
   private updateThemeIcon(): void { $('#theme-button').innerHTML = icon(this.renderer.state.dark ? 'sun' : 'moon'); }
-  private collapseProperties(collapsed: boolean): void { $('#properties').hidden = collapsed; $('#expand-properties').hidden = !collapsed; }
+  private collapseProperties(collapsed: boolean): void { $('#properties').hidden = collapsed; $('#expand-properties').hidden = !collapsed; this.selectionToolbar.update(); }
 
   private closeMenus(): void { document.querySelectorAll<HTMLElement>('.menu').forEach(menu => { menu.hidden = true; }); }
   private toggleMenu(id: string, anchor: HTMLElement, right = false): void {

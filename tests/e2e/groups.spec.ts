@@ -106,10 +106,11 @@ test('multi-selection has separate frames and no transform handles while a group
 test('alignment and spacing act on groups as units and remain undoable', async ({ page }) => {
   await seed(page); await selectPair(page); await page.keyboard.press('Control+g');
   await page.keyboard.down('Shift'); await page.mouse.click(940, 380); await page.keyboard.up('Shift');
+  await page.locator('#alignment-trigger').click();
   await page.getByRole('button', { name: '顶端对齐', exact: true }).click();
   const doc = await read(page);
   expect(doc.elements[0].y).toBe(250); expect(doc.elements[1].y).toBe(300); expect(doc.elements[2].y).toBe(250);
   await page.keyboard.press('Control+z'); expect((await read(page)).elements[2].y).toBe(350);
-  await page.keyboard.press('Control+Shift+g'); await page.getByRole('button', { name: '水平等距', exact: true }).click();
+  await page.keyboard.press('Control+Shift+g'); await page.locator('#alignment-trigger').click(); await page.getByRole('button', { name: '水平等距', exact: true }).click();
   expect((await read(page)).elements[1].x).toBe(675);
 });

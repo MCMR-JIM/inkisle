@@ -46,14 +46,17 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
         <div class="property-group"><label for="opacity">不透明度 <output id="opacity-value">100%</output></label><input id="opacity" type="range" min="10" max="100" value="100" aria-label="不透明度"/></div>
         <div id="selection-actions" class="selection-actions" hidden>
           <span id="selection-label">已选择 1 个元素</span>
-          <div class="group-controls"><button id="group-button" class="button button-subtle" data-tooltip="组合 · Ctrl + G">组合</button><button id="ungroup-button" class="button button-subtle" data-tooltip="取消组合 · Ctrl + Shift + G">解组</button></div>
-          <div id="alignment-controls" class="alignment-controls" role="group" aria-label="对齐与分布">${[['left', '左对齐'], ['center', '水平居中'], ['right', '右对齐'], ['top', '顶端对齐'], ['middle', '垂直居中'], ['bottom', '底端对齐'], ['horizontal', '水平等距'], ['vertical', '垂直等距']].map(([action, label]) => `<button data-align="${action}" data-tooltip="${label}" aria-label="${label}">${label}</button>`).join('')}</div>
           <div class="layer-controls">${button('send-back', 'back', '置于底层')}${button('send-backward', 'layer-down', '下移一层')}${button('bring-forward', 'layer-up', '上移一层')}${button('bring-front', 'front', '置于顶层')}</div>
           <div class="object-controls">${button('duplicate-button', 'duplicate', '复制元素')}${button('lock-button', 'lock', '锁定元素')}${button('delete-button', 'trash', '删除元素')}</div>
         </div>
         <div class="property-footnote">${icon('bolt', 13)}<span>轻一点，让想法快一点。</span></div>
       </div>
     </aside>
+    <div id="selection-toolbar" class="selection-toolbar panel" role="toolbar" aria-label="选区操作" hidden>
+      <button id="group-button" data-tooltip="组合 · Ctrl + G">组合</button><button id="ungroup-button" data-tooltip="取消组合 · Ctrl + Shift + G">解组</button>
+      <button id="alignment-trigger" aria-expanded="false" aria-controls="alignment-controls">对齐与分布 ${icon('chevron', 14)}</button>
+      <div id="alignment-controls" class="selection-alignment-menu panel" role="group" aria-label="对齐与分布" hidden>${[['left', '左对齐'], ['center', '水平居中'], ['right', '右对齐'], ['top', '顶端对齐'], ['middle', '垂直居中'], ['bottom', '底端对齐'], ['horizontal', '水平等距'], ['vertical', '垂直等距']].map(([action, label]) => `<button data-align="${action}" aria-label="${label}">${label}</button>`).join('')}</div>
+    </div>
     <button id="expand-properties" class="panel icon-button expand-properties" aria-label="展开样式" hidden>${icon('settings')}</button>
     <div id="group-navigation" class="group-navigation panel" hidden><span id="group-scope-label"></span><button id="exit-group" class="button button-subtle">退出一层 <kbd>Esc</kbd></button></div>
     <div id="empty-state" class="empty-state" hidden><div class="empty-mark">${logo}</div><h1>好想法，在${PRODUCT.name}生长。</h1><p>随手画一笔，或按 <kbd>N</kbd> 贴下第一个灵感。</p><div><button class="button button-subtle" id="add-first-note">${icon('note', 16)}贴一张便签</button><button class="text-button" id="show-example">看看示例 ${icon('arrowRight', 15)}</button></div></div>
