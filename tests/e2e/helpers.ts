@@ -16,3 +16,13 @@ export async function chooseTool(page: Page, label: string): Promise<void> {
   if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
   await page.locator(`[data-tool-child="${childIds[label]}"]`).click();
 }
+
+export async function openContextMenu(page: Page): Promise<void> {
+  const viewport = page.viewportSize()!;
+  await page.mouse.click(viewport.width - 16, 110, { button: 'right' });
+}
+
+export async function contextAction(page: Page, action: string): Promise<void> {
+  await openContextMenu(page);
+  await page.locator(`#context-menu [data-action="${action}"]`).click();
+}

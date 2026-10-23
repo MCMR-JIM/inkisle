@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
@@ -84,7 +84,7 @@ test('multiple selected shapes restore their own fill colors and locked objects 
   await chooseTool(page, '选择工具'); await page.keyboard.press('Control+a'); await page.locator('#fill-toggle').click();
   expect((await elements(page)).map((el: { fill: string }) => el.fill)).toEqual(['transparent', 'transparent']);
   await page.locator('#fill-toggle').click(); expect((await elements(page)).map((el: { fill: string }) => el.fill)).toEqual(['#deedf5', '#f8e3dc']);
-  await page.locator('#lock-button').click(); await expect(page.locator('#fill-toggle')).toBeDisabled();
+  await contextAction(page, 'lock'); await expect(page.locator('#fill-toggle')).toBeDisabled();
 });
 
 test('old transparent preset preferences migrate in place and the switch fits both themes on mobile', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction, openContextMenu } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/');
@@ -173,12 +173,12 @@ test('pen, shapes, text, notes and images lose only the touched pixels at high D
 
 test('eraser gestures respect locks and cancellation, and holes transform with resize', async ({ page }) => {
   await blank(page); await filledRect(page);
-  await page.locator('#lock-button').click();
+  await contextAction(page, 'lock');
   await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
   await page.mouse.click(650, 370);
   expect((await pixels(page, [[650, 370]]))[0].slice(0, 3)).toEqual([230, 238, 229]);
   await page.getByRole('button', { name: '选择工具', exact: true }).click();
-  await page.mouse.click(550, 400); await page.locator('#lock-button').click();
+  await page.mouse.click(550, 400); await contextAction(page, 'lock');
   await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
   await page.mouse.move(650, 270); await page.mouse.down(); await page.mouse.move(650, 530);
   await page.keyboard.press('Escape'); await page.mouse.up();
@@ -212,7 +212,7 @@ test('the custom selector remains in the mobile viewport in both themes', async 
 
 test('drawing through an erased hole selects the content underneath and preserves locked lower layers', async ({ page }) => {
   await blank(page); await filledRect(page);
-  await page.locator('#lock-button').click();
+  await contextAction(page, 'lock');
   await chooseTool(page, '矩形');
   await page.mouse.move(520, 320); await page.mouse.down(); await page.mouse.move(780, 480); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(650, 320);
@@ -222,7 +222,8 @@ test('drawing through an erased hole selects the content underneath and preserve
   expect((await pixels(page, [[650, 370]]))[0].slice(0, 3)).toEqual([230, 238, 229]);
   await page.getByRole('button', { name: '选择工具', exact: true }).click();
   await page.mouse.click(650, 370);
-  await expect(page.locator('#lock-button svg')).toBeVisible();
+  await openContextMenu(page);
+  await expect(page.locator('#context-menu [data-action="lock"]')).toBeEnabled();
   const selectedFill = page.locator('[data-property="fill"][data-color="#e6eee5"]');
   await expect(selectedFill).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Delete');

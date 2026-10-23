@@ -89,7 +89,7 @@ test('multi-selection has separate frames and no transform handles while a group
   await seed(page); await selectPair(page); await page.keyboard.press('Control+g');
   await page.mouse.click(1100, 500);
   await page.mouse.move(430, 230); await page.mouse.down(); await page.mouse.move(550, 330); await page.mouse.up();
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await page.mouse.move(430, 230); await page.mouse.down(); await page.mouse.move(750, 380); await page.mouse.up();
   await expect(page.locator('#selection-label')).toHaveText('已选择 1 个对象 · 2 个元素');
   await page.mouse.dblclick(490, 280);

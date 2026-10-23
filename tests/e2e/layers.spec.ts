@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction, openContextMenu } from './helpers';
 import type { BoardElement } from '../../src/core/model';
 import type { RenderState } from '../../src/engine/renderer';
 
@@ -52,15 +52,15 @@ test('transparent upper objects are composited only once while selecting and dra
   expect(await pixel(page)).toEqual(before); await page.mouse.up(); expect(await pixel(page)).toEqual(before);
 });
 
-test('single-step buttons and top/bottom operations preserve selection, undo, persisted order and visual occlusion', async ({ page }) => {
+test('context menu layer operations preserve selection, undo, persisted order and visual occlusion', async ({ page }) => {
   const initial = await stack(page); await page.mouse.click(520, 410);
-  await page.locator('#bring-forward').click(); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[0].id]);
+  await contextAction(page, 'forward'); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[0].id]);
   expect((await pixel(page)).slice(0, 3)).toEqual([248, 227, 220]);
-  await page.locator('#send-backward').click(); expect((await read(page)).map(el => el.id)).toEqual(initial.map(el => el.id));
+  await contextAction(page, 'backward'); expect((await read(page)).map(el => el.id)).toEqual(initial.map(el => el.id));
   expect((await pixel(page)).slice(0, 3)).toEqual([222, 237, 245]);
-  await page.locator('#bring-front').click(); await read(page); await page.keyboard.press('Control+z'); expect((await read(page)).map(el => el.id)).toEqual(initial.map(el => el.id));
+  await contextAction(page, 'front'); await read(page); await page.keyboard.press('Control+z'); expect((await read(page)).map(el => el.id)).toEqual(initial.map(el => el.id));
   await page.keyboard.press('Control+Shift+z'); expect((await read(page)).at(-1)!.id).toBe(initial[0].id);
-  await page.locator('#send-back').click(); expect((await read(page))[0].id).toBe(initial[0].id);
+  await contextAction(page, 'back'); expect((await read(page))[0].id).toBe(initial[0].id);
   await page.reload(); expect((await read(page)).map(el => el.id)).toEqual(initial.map(el => el.id));
   const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const file = await downloading;
   await page.locator('#import-file').setInputFiles((await file.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
@@ -80,8 +80,9 @@ test('layer step shortcuts and context menu entries are available and configurab
   await expect(page.locator('[data-shortcut="send-backward"]')).toHaveText('Ctrl + [');
   await page.locator('[data-shortcut="bring-forward"]').click(); await page.keyboard.press('q');
   await page.getByRole('button', { name: '关闭帮助', exact: true }).click();
-  await expect(page.locator('#bring-forward')).toHaveAttribute('data-tooltip', /Q/);
-  await page.locator('#send-backward').click(); await read(page); await page.keyboard.press('q');
+  await openContextMenu(page);
+  await expect(page.locator('#context-menu [data-action="forward"] kbd')).toHaveText('Q');
+  await contextAction(page, 'backward'); await read(page); await page.keyboard.press('q');
   expect((await read(page)).at(-1)!.id).toBe(initial[0].id);
 });
 
@@ -124,16 +125,17 @@ test('nonconsecutive multi-selection, erased upper holes and offscreen editing o
   expect(result.moved).toEqual([[248, 227, 220], [222, 237, 245]]);
 });
 
-test('layer actions stay distinct and borderless inside small and large style panels', async ({ page }) => {
+test('object commands remain in the context menu across viewport sizes and themes', async ({ page }) => {
   await stack(page); await page.mouse.click(520, 410);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     for (let theme = 0; theme < 2; theme++) {
-      const panel = (await page.locator('#properties').boundingBox())!;
-      const controls = await page.locator('.layer-controls > button').evaluateAll(nodes => nodes.map(el => ({ box: el.getBoundingClientRect().toJSON(), border: getComputedStyle(el).borderTopWidth })));
-      expect(controls).toHaveLength(4);
-      for (const control of controls) { expect(control.box.x).toBeGreaterThanOrEqual(panel.x); expect(control.box.right).toBeLessThanOrEqual(panel.x + panel.width); expect(control.border).toBe('0px'); }
-      expect(new Set(controls.map(control => control.box.y)).size).toBe(1);
+      await expect(page.locator('#properties .layer-controls, #properties .object-controls, #properties #selection-label')).toHaveCount(0);
+      await openContextMenu(page);
+      for (const action of ['forward', 'backward', 'front', 'back', 'duplicate', 'lock', 'delete']) {
+        await expect(page.locator(`#context-menu [data-action="${action}"]`)).toBeVisible();
+      }
+      await page.keyboard.press('Escape');
       await page.locator('#theme-button').click();
     }
   }
@@ -146,12 +148,13 @@ test('each step crosses only one object and multi-selection keeps its internal o
     await page.mouse.move(x, 300); await page.mouse.down(); await page.mouse.move(x + 160, 440); await page.mouse.up();
   }
   const initial = await read(page); await chooseTool(page, '选择工具'); await page.mouse.click(530, 300);
-  await page.locator('#bring-forward').click(); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[0].id, initial[2].id]);
-  await page.locator('#bring-forward').click(); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[2].id, initial[0].id]);
+  await contextAction(page, 'forward'); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[0].id, initial[2].id]);
+  await contextAction(page, 'forward'); expect((await read(page)).map(el => el.id)).toEqual([initial[1].id, initial[2].id, initial[0].id]);
   await page.keyboard.press('Control+z'); await read(page); await page.keyboard.press('Control+z'); await read(page);
   await page.keyboard.down('Shift'); await page.mouse.click(760, 300); await page.keyboard.up('Shift');
   await expect(page.locator('#selection-label')).toHaveText('已选择 2 个元素');
-  await page.locator('#bring-forward').click(); expect((await read(page)).map(el => el.id)).toEqual([initial[2].id, initial[0].id, initial[1].id]);
-  await page.locator('#lock-button').click();
-  for (const control of ['bring-front', 'send-back', 'bring-forward', 'send-backward']) await expect(page.locator(`#${control}`)).toBeDisabled();
+  await contextAction(page, 'forward'); expect((await read(page)).map(el => el.id)).toEqual([initial[2].id, initial[0].id, initial[1].id]);
+  await contextAction(page, 'lock');
+  await openContextMenu(page);
+  for (const action of ['front', 'back', 'forward', 'backward', 'delete']) await expect(page.locator(`#context-menu [data-action="${action}"]`)).toBeDisabled();
 });

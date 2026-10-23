@@ -44,14 +44,10 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
         <div class="property-group property-row"><label>线条样式</label><div class="mini-segmented"><button data-dash="false" class="active" aria-label="实线">━</button><button data-dash="true" aria-label="虚线">┄</button></div></div>
         <div class="property-group property-row"><label for="font-size">文字大小</label><button id="font-size" aria-label="文字大小"></button></div>
         <div class="property-group"><label for="opacity">不透明度 <output id="opacity-value">100%</output></label><input id="opacity" type="range" min="10" max="100" value="100" aria-label="不透明度"/></div>
-        <div id="selection-actions" class="selection-actions" hidden>
-          <span id="selection-label">已选择 1 个元素</span>
-          <div class="layer-controls">${button('send-back', 'back', '置于底层')}${button('send-backward', 'layer-down', '下移一层')}${button('bring-forward', 'layer-up', '上移一层')}${button('bring-front', 'front', '置于顶层')}</div>
-          <div class="object-controls">${button('duplicate-button', 'duplicate', '复制元素')}${button('lock-button', 'lock', '锁定元素')}${button('delete-button', 'trash', '删除元素')}</div>
-        </div>
         <div class="property-footnote">${icon('bolt', 13)}<span>轻一点，让想法快一点。</span></div>
       </div>
     </aside>
+    <div id="selection-status" class="visually-hidden" role="status" hidden><span id="selection-label"></span></div>
     <div id="selection-toolbar" class="selection-toolbar panel" role="toolbar" aria-label="选区操作" hidden>
       <button id="group-button" data-tooltip="组合 · Ctrl + G">组合</button><button id="ungroup-button" data-tooltip="取消组合 · Ctrl + Shift + G">解组</button>
       <button id="alignment-trigger" aria-expanded="false" aria-controls="alignment-controls">对齐与分布 ${icon('chevron', 14)}</button>

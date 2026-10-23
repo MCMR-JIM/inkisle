@@ -250,9 +250,6 @@ export class App {
       this.selectionChanged();
     });
     on('collapse-properties', () => this.collapseProperties(true)); on('expand-properties', () => this.collapseProperties(false));
-    on('bring-front', () => this.reorder('front')); on('send-back', () => this.reorder('back'));
-    on('bring-forward', () => this.reorder('forward')); on('send-backward', () => this.reorder('backward'));
-    on('duplicate-button', () => this.duplicate()); on('delete-button', () => this.deleteSelection()); on('lock-button', () => this.toggleLock());
     on('save-status', () => { if (this.writer) void this.writer.flush(); });
     on('add-first-note', () => {
       const p = screenToWorld({ x: this.renderer.width / 2 - 80, y: this.renderer.height / 2 - 40 }, this.renderer.state.camera);
@@ -359,7 +356,7 @@ export class App {
     this.renderer.state.selected = new Set(units.flatMap(unit => unit.elements.map(el => el.id)));
     const elements = this.selected();
     const first = elements[0];
-    $('#selection-actions').hidden = !elements.length;
+    $('#selection-status').hidden = !elements.length;
     $('#selection-label').textContent = `已选择 ${elements.length} 个元素`;
     if (units.some(unit => unit.group)) $('#selection-label').textContent = `已选择 ${units.length} 个对象 · ${elements.length} 个元素`;
     $<HTMLButtonElement>('#group-button').disabled = units.length < 2 || elements.some(el => el.locked || (el.groupPath?.length ?? 0) >= 32);
@@ -389,8 +386,6 @@ export class App {
     $('#opacity-value').textContent = `${Math.round((style.opacity ?? 1) * 100)}%`;
     const size = style.fontSize ?? 24;
     this.fontSize.setValue(size);
-    $('#lock-button').innerHTML = icon(first?.locked ? 'unlock' : 'lock');
-    for (const id of ['bring-front', 'send-back', 'bring-forward', 'send-backward']) $<HTMLButtonElement>(`#${id}`).disabled = !elements.some(el => !el.locked);
     this.renderer.invalidate(false); this.updateHistory();
   }
 
@@ -587,9 +582,6 @@ export class App {
     }
     const hints: Record<string, string> = { new: 'new-board', duplicate: 'duplicate', forward: 'bring-forward', backward: 'send-backward', front: 'bring-front', back: 'send-back', delete: 'delete', edit: 'edit', grid: 'grid', help: 'help', group: 'group', ungroup: 'ungroup' };
     for (const [action, id] of Object.entries(hints)) document.querySelectorAll<HTMLElement>(`[data-action="${action}"] > kbd`).forEach(el => { el.textContent = this.shortcuts.get(id) ? shortcutLabel(this.shortcuts.get(id)) : ''; });
-    for (const [id, label] of [['bring-forward', '上移一层'], ['send-backward', '下移一层'], ['bring-front', '置于顶层'], ['send-back', '置于底层']]) {
-      const chord = this.shortcuts.get(id); $(`#${id}`).dataset.tooltip = `${label}${chord ? `  ${shortcutLabel(chord)}` : ''}`;
-    }
     for (const [id, label, action] of [['group-button', '组合', 'group'], ['ungroup-button', '取消组合', 'ungroup']]) {
       const chord = this.shortcuts.get(action); $(`#${id}`).dataset.tooltip = `${label}${chord ? `  ${shortcutLabel(chord)}` : ''}`;
     }
@@ -744,6 +736,9 @@ export class App {
     const hit = this.scene.query({ x: point.x - 5, y: point.y - 5, w: 10, h: 10 }).reverse().find(el => hitTest(el, point, 5));
     if (hit && !this.renderer.state.selected.has(hit.id)) { this.setTool('select'); this.interaction.selectElement(hit); }
     const units = selectedUnits(this.scene.elements, this.renderer.state.selected, this.renderer.state.groupScope ?? []);
+    for (const action of ['forward', 'backward', 'front', 'back', 'delete']) {
+      $<HTMLButtonElement>(`#context-menu [data-action="${action}"]`).disabled = !this.movableSelection().length;
+    }
     $<HTMLButtonElement>('#context-menu [data-action="group"]').disabled = units.length < 2 || this.selected().some(el => el.locked);
     $<HTMLButtonElement>('#context-menu [data-action="ungroup"]').disabled = !units.some(unit => unit.group && !unit.elements.some(el => el.locked));
     const menu = $('#context-menu'); menu.hidden = false;

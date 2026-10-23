@@ -69,7 +69,7 @@ test('arbitrary triangles and ellipses are recognized and every other stroke is 
   await chooseTool(page, '轨迹识别');
   await trace(page, [{ x: 500, y: 600 }, { x: 550, y: 650 }, { x: 600, y: 600 }, { x: 650, y: 650 }, { x: 700, y: 600 }]);
   elements = await read(page); expect(['triangle', 'rect', 'ellipse']).toContain(elements[2].kind); expect(elements[2].points).toHaveLength(0);
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await page.keyboard.press('Control+z'); await expect(page.locator('#element-count')).toHaveText('2 个元素');
   await page.keyboard.press('Control+Shift+z'); await expect(page.locator('#element-count')).toHaveText('3 个元素');
   await expect(page.locator('#save-status')).toContainText('已保存在本机');

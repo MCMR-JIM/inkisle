@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
 
@@ -103,7 +103,7 @@ test('production recognition forces every stroke into a shape and keeps a separa
   for (let i = 1; i <= 70; i++) await page.mouse.move(600 + 100 * Math.cos(i / 70 * Math.PI * 2), 400 + 96 * Math.sin(i / 70 * Math.PI * 2));
   await page.mouse.up();
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await chooseTool(page, '圆角矩形');
   await page.mouse.move(800, 300); await page.mouse.down(); await page.mouse.move(1000, 450); await page.mouse.up();
   await expect(page.locator('#element-count')).toHaveText('2 个元素');
@@ -300,7 +300,7 @@ test('production selection encloses complete shapes and never selects interface 
   await page.mouse.move(label.x + 2, label.y + label.height / 2); await page.mouse.down(); await page.mouse.move(label.x + label.width - 2, label.y + label.height / 2); await page.mouse.up();
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
   await page.mouse.move(480, 280); await page.mouse.down(); await page.mouse.move(690, 470); await page.mouse.up();
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await page.mouse.move(480, 280); await page.mouse.down(); await page.mouse.move(720, 470); await page.mouse.up();
   await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
   const copy = await page.locator('#interaction-canvas').evaluate(el => {
@@ -326,8 +326,8 @@ test('production selected content stays below upper objects while step controls 
   await page.evaluate(() => new Promise(requestAnimationFrame)); expect(await pixel()).toEqual([222, 237, 245]);
   await page.mouse.move(520, 410); await page.mouse.down(); await page.mouse.move(540, 420); await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(await pixel()).toEqual([222, 237, 245]); await page.mouse.up();
-  await page.locator('#bring-forward').click(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
-  await page.locator('#send-backward').click(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([222, 237, 245]);
+  await contextAction(page, 'forward'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
+  await contextAction(page, 'backward'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([222, 237, 245]);
   await page.keyboard.press('Control+]'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
   await page.reload(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
 });

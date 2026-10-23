@@ -17,7 +17,7 @@ test('shape, line and recognition tools stay active across consecutive gestures 
       await expect(page.locator('#element-count')).toHaveText(`${count} 个元素`);
       await expect(page.locator(`[data-tool-child="${tool}"]`)).toHaveAttribute('aria-selected', 'true');
       await expect(page.locator('[data-family="select"]')).toHaveAttribute('aria-pressed', 'false');
-      await expect(page.locator('#selection-actions')).toBeHidden();
+      await expect(page.locator('#selection-status')).toBeHidden();
     }
   }
   await chooseTool(page, '选择工具'); await page.keyboard.press('Control+a');
@@ -35,7 +35,7 @@ test('finishing text and notes preserves their tool and allows another item', as
       count++;
       await expect(page.locator('#element-count')).toHaveText(`${count} 个元素`);
       await expect(page.locator(`[data-family="${family}"]`)).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('#selection-actions')).toBeHidden();
+      await expect(page.locator('#selection-status')).toBeHidden();
     }
   }
   await page.keyboard.press('Escape'); await expect(page.locator('[data-family="select"]')).toHaveAttribute('aria-pressed', 'true');

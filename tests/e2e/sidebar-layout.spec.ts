@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 
 async function centered(page: Page, selector = '#properties'): Promise<void> {
   await expect.poll(async () => {
@@ -24,17 +24,17 @@ test('the style panel and collapsed launcher stay vertically centered as viewpor
   }
 });
 
-test('selection actions scroll inside a centered short panel without covering bottom controls', async ({ page }) => {
+test('styles scroll inside a centered short panel while object commands remain in the context menu', async ({ page }) => {
   await page.goto('/'); await page.locator('#quick-new').click(); await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(720, 450); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(600, 300); await centered(page);
   await page.setViewportSize({ width: 1024, height: 600 }); await centered(page);
   const scrolling = await page.locator('#property-content').evaluate(el => ({ content: el.scrollHeight, viewport: el.clientHeight, overflow: getComputedStyle(el).overflowY }));
   expect(scrolling.content).toBeGreaterThan(scrolling.viewport); expect(scrolling.overflow).toBe('auto');
-  await page.locator('#bring-forward').scrollIntoViewIfNeeded(); await expect(page.locator('#bring-forward')).toBeInViewport();
+  await page.locator('#opacity').scrollIntoViewIfNeeded(); await expect(page.locator('#opacity')).toBeInViewport();
   const panel = (await page.locator('#properties').boundingBox())!, bottom = (await page.locator('.bottom-left').boundingBox())!;
   expect(panel.y + panel.height).toBeLessThan(bottom.y);
-  await page.locator('#delete-button').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素'); await centered(page);
+  await contextAction(page, 'delete'); await expect(page.locator('#element-count')).toHaveText('0 个元素'); await centered(page);
 });
 
 test('an open color picker tracks the panel when its content height changes without resizing the viewport', async ({ page }) => {

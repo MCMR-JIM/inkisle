@@ -11,10 +11,11 @@ async function seed(page: Page, mobile = false): Promise<void> {
   await expect(page.locator('#toast')).toContainText('画板已导入');
 }
 
-test('the original left panel keeps its controls and order while new commands appear beside a multi-selection', async ({ page }) => {
+test('the left panel contains only styles while selection commands appear beside a multi-selection', async ({ page }) => {
   await seed(page);
   await expect(page.locator('#properties #group-button, #properties #ungroup-button, #properties [data-align]')).toHaveCount(0);
-  expect(await page.locator('#property-content > div').evaluateAll(nodes => ({ first: nodes[0].querySelector('#stroke-colors') !== null, actionsAtEnd: nodes[nodes.length - 2].id === 'selection-actions' }))).toEqual({ first: true, actionsAtEnd: true });
+  await expect(page.locator('#properties #selection-label, #properties .layer-controls, #properties .object-controls')).toHaveCount(0);
+  expect(await page.locator('#property-content > div').evaluateAll(nodes => ({ first: nodes[0].querySelector('#stroke-colors') !== null, footnoteAtEnd: nodes.at(-1)!.classList.contains('property-footnote') }))).toEqual({ first: true, footnoteAtEnd: true });
   await page.mouse.click(490, 280); await expect(page.locator('#selection-toolbar')).toBeHidden();
   const singleHeight = await page.locator('#property-content').evaluate(el => el.scrollHeight);
   await page.keyboard.press('Control+a');
