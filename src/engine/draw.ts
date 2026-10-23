@@ -131,6 +131,7 @@ function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, pr
     if (el.fontSize * zoom >= 5) drawText(ctx, el, b.x, b.y, b.w || 1000, undefined, false, ink);
   } else if (el.kind === 'line' || el.kind === 'arrow' || el.kind === 'bidirectional-arrow') {
     ctx.beginPath(); ctx.moveTo(el.x, el.y); ctx.lineTo(el.x + el.w, el.y + el.h); ctx.stroke();
+    ctx.setLineDash([]);
     const heads = arrowHeadKinds(el);
     if (heads.end) drawArrowHead(ctx, { x: el.x + el.w, y: el.y + el.h }, { x: el.x, y: el.y }, el.strokeWidth);
     if (heads.start) drawArrowHead(ctx, { x: el.x, y: el.y }, { x: el.x + el.w, y: el.y + el.h }, el.strokeWidth);

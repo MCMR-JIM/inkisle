@@ -4,6 +4,7 @@ import { CANVAS_FONT, drawElement, preloadImages, wrapText } from './draw';
 import { shapeVertices } from '../core/paths';
 import { rotationCenter } from '../core/transforms';
 import { inkSVG, smoothInk } from '../core/ink';
+import { arrowHeadKinds, isLinearElement } from '../core/linear';
 
 export function downloadBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
@@ -94,11 +95,14 @@ export function exportSVG(doc: BoardDocument, elements = doc.elements, options: 
     }
     else if (el.kind === 'ellipse') parts.push(`<ellipse cx="${box.x + box.w / 2}" cy="${box.y + box.h / 2}" rx="${box.w / 2}" ry="${box.h / 2}" ${attrs}/>`);
     else if (['diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) parts.push(`<polygon points="${shapeVertices(el).map(p => `${el.x + p.x},${el.y + p.y}`).join(' ')}" ${attrs}/>`);
-    else if (el.kind === 'line' || el.kind === 'arrow') {
+    else if (isLinearElement(el)) {
       parts.push(`<path d="M${el.x} ${el.y}L${el.x + el.w} ${el.y + el.h}" ${attrs}/>`);
-      if (el.kind === 'arrow') {
-        const angle = Math.atan2(el.h, el.w), length = Math.min(Math.hypot(el.w, el.h) / 2, Math.max(12, el.strokeWidth * 4));
-        parts.push(`<path d="M${el.x + el.w - length * Math.cos(angle - Math.PI / 6)} ${el.y + el.h - length * Math.sin(angle - Math.PI / 6)}L${el.x + el.w} ${el.y + el.h}L${el.x + el.w - length * Math.cos(angle + Math.PI / 6)} ${el.y + el.h - length * Math.sin(angle + Math.PI / 6)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" fill="none" stroke-linecap="round"/>`);
+      const heads = arrowHeadKinds(el);
+      for (const start of [false, true]) {
+        if (!(start ? heads.start : heads.end)) continue;
+        const tip = start ? { x: el.x, y: el.y } : { x: el.x + el.w, y: el.y + el.h };
+        const angle = Math.atan2(start ? -el.h : el.h, start ? -el.w : el.w), length = Math.max(12, el.strokeWidth * 4);
+        parts.push(`<path d="M${tip.x - length * Math.cos(angle - Math.PI / 6)} ${tip.y - length * Math.sin(angle - Math.PI / 6)}L${tip.x} ${tip.y}L${tip.x - length * Math.cos(angle + Math.PI / 6)} ${tip.y - length * Math.sin(angle + Math.PI / 6)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" fill="none" stroke-linecap="round"/>`);
       }
     } else if (el.kind === 'image') parts.push(`<image x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" href="${esc(el.src!)}" preserveAspectRatio="none"/>`);
     else if (el.kind !== 'text') parts.push(`<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="${el.kind === 'rect' ? 0 : el.kind === 'note' ? 3 : Math.min(el.radius, box.w / 2, box.h / 2)}" ${el.kind === 'note' ? `fill="${el.fill}"` : attrs}/>`);
