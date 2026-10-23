@@ -57,6 +57,7 @@ export function validateDocument(input: unknown): asserts input is BoardDocument
     for (const key of ['x', 'y', 'w', 'h'] as const) assert(finite(el[key]));
     assert(finite(el.order, 1e16));
     assert(el.rotation === undefined || finite(el.rotation, Math.PI * 1000));
+    assert(el.rotationHandleSide === undefined || el.rotationHandleSide === 1 || el.rotationHandleSide === -1);
     if (el.orderPath !== undefined) assert(Array.isArray(el.orderPath) && el.orderPath.length <= 256 && el.orderPath.every(n => Number.isSafeInteger(n) && n >= 0));
     assert(typeof el.stroke === 'string' && color.test(el.stroke) && typeof el.fill === 'string' && color.test(el.fill));
     assert(el.fillColor === undefined || typeof el.fillColor === 'string' && el.fillColor !== 'transparent' && color.test(el.fillColor));

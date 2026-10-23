@@ -4,6 +4,7 @@
 
 - A marquee selects only fully enclosed objects. A group must be fully enclosed to be selected from outside it.
 - An ordinary multi-selection shows a separate frame around each object and supports moving only. Resize and rotation handles appear for an individually selected object.
+- Rotation stems choose their initial near-zero orientation when the object is created, then turn with the object. Line and arrow stems retain their side through endpoint edits, undo/redo, source files and reopening.
 - Use **Ctrl+G** to group selected objects and **Ctrl+Shift+G** to ungroup one level. Existing groups can be grouped again, up to 32 levels.
 - Double-click a group, or press **Enter** when one group is selected, to enter it. Repeat to enter a nested group. The group indicator shows the current depth.
 - Inside a group, click to select an individual object, or Shift-click / marquee to select several children. Single objects retain resize and rotation controls; multiple objects can only move.

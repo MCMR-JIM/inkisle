@@ -5,7 +5,7 @@ import { editorTextOffset, textFont, textLayout } from './text-layout';
 import { eraseAt, erasureBounds, scaleErasures } from '../core/erasure';
 import { transformPath } from '../core/paths';
 import { Cutter } from './cutter';
-import { isLinearElement, lineEndpoints, lineRotationHandle, withLineEndpoints } from '../core/linear';
+import { isLinearElement, lineEndpoints, lineHandleSide, lineRotationHandle, withLineEndpoints } from '../core/linear';
 import { rotatePoint, rotationCenter, snapLineEndpoint, snapRotation } from '../core/transforms';
 import { selectionFrame, selectionPadding, resizeFromCorner, type CornerHandle } from '../core/selection-frame';
 import { recognizeShape } from '../core/recognition';
@@ -326,6 +326,7 @@ export class Interaction {
       } else if (Math.hypot(el.w, el.h) < 4 / this.r.state.camera.zoom) {
         el = { ...el, w: 160, h: isLinearElement(el) ? 0 : 100 };
       }
+      if (isLinearElement(el)) el = { ...el, rotationHandleSide: lineHandleSide(el) };
       this.r.scene.apply([{ id: el.id, after: el }], '绘制');
       // Creation tools are sticky. Selection is an explicit action (V/Esc).
       this.r.state.selected.clear();

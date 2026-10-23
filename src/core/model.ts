@@ -15,6 +15,8 @@ export interface BoardElement extends Bounds {
   order: number;
   orderPath?: number[];
   rotation: number;
+  /** Initial side of a line's rotation stem, retained when editing endpoints. */
+  rotationHandleSide?: 1 | -1;
   stroke: string;
   fill: string;
   /** Selected fill retained while the rendered fill is transparent. */
