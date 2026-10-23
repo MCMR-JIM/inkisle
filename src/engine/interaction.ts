@@ -1,12 +1,12 @@
 import { createElement, type BoardElement, type Bounds, type Camera, type Change, type Point, type Tool } from '../core/model';
 import { containsBounds, expandBounds, hitTest, normalizeBounds, screenToWorld, simplifyPoints, unionBounds, zoomAt } from '../core/geometry';
 import { Renderer } from './renderer';
-import { CANVAS_FONT, wrapText } from './draw';
+import { editorTextOffset, textFont, textLayout } from './text-layout';
 import { eraseAt, erasureBounds, scaleErasures } from '../core/erasure';
 import { transformPath } from '../core/paths';
 import { Cutter } from './cutter';
 import { isLinearElement, lineEndpoints, lineRotationHandle, withLineEndpoints } from '../core/linear';
-import { rotationCenter, snapLineEndpoint, snapRotation } from '../core/transforms';
+import { rotatePoint, rotationCenter, snapLineEndpoint, snapRotation } from '../core/transforms';
 import { selectionFrame, selectionPadding, resizeFromCorner, type CornerHandle } from '../core/selection-frame';
 import { recognizeShape } from '../core/recognition';
 import { wheelZoom } from '../core/camera';
@@ -399,27 +399,30 @@ export class Interaction {
   editText(el: BoardElement, fresh = false): void {
     this.finishEditing();
     this.editing = { el, fresh };
-    const b = normalizeBounds(el), padding = el.kind === 'text' ? 0 : el.kind === 'note' ? 22 : 16;
-    const p = { x: b.x + padding, y: b.y + padding };
-    const screen = { x: p.x * this.r.state.camera.zoom + this.r.state.camera.x, y: p.y * this.r.state.camera.zoom + this.r.state.camera.y };
     this.r.state.hidden.add(el.id);
     this.r.state.preview = el.kind === 'text' ? [] : [{ ...el, text: '' }];
     this.r.state.selected.clear();
     const editor = this.editor;
     editor.hidden = false; editor.value = el.text;
-    editor.style.left = `${screen.x}px`; editor.style.top = `${screen.y}px`;
-    editor.style.width = `${Math.max(100, b.w - padding * 2) * this.r.state.camera.zoom}px`;
-    editor.style.minHeight = `${el.fontSize * 1.6 * this.r.state.camera.zoom}px`;
-    editor.style.fontSize = `${el.fontSize * this.r.state.camera.zoom}px`;
+    editor.style.font = textFont(el);
     editor.style.color = el.stroke;
-    editor.style.fontWeight = el.kind === 'text' && el.fontSize >= 32 ? '600' : '400';
+    editor.style.opacity = `${el.opacity}`;
     this.sizeEditor(); this.r.invalidate();
-    editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length);
+    editor.focus({ preventScroll: true }); editor.setSelectionRange(editor.value.length, editor.value.length);
   }
 
   private sizeEditor(): void {
-    this.editor.style.height = 'auto';
-    this.editor.style.height = `${this.editor.scrollHeight + 4}px`;
+    if (!this.editing) return;
+    const { el } = this.editing, editor = this.editor, ctx = this.r.canvas.getContext('2d')!;
+    const layout = textLayout(ctx, el, editor.value), camera = this.r.state.camera;
+    const origin = rotatePoint({ x: layout.x, y: layout.y + editorTextOffset(ctx, el) }, rotationCenter(el), el.rotation ?? 0);
+    editor.style.left = `${origin.x * camera.zoom + camera.x}px`;
+    editor.style.top = `${origin.y * camera.zoom + camera.y}px`;
+    editor.style.transform = `rotate(${el.rotation ?? 0}rad) scale(${camera.zoom})`;
+    editor.style.width = `${layout.width}px`;
+    editor.style.lineHeight = `${layout.leading}px`;
+    editor.style.textAlign = layout.centered ? 'center' : 'left';
+    editor.style.height = `${layout.lines.length * layout.leading + 4}px`;
   }
 
   finishEditing(): void {
@@ -431,14 +434,19 @@ export class Interaction {
     if (text.trim() || !fresh) {
       if (text !== el.text || fresh) {
         const measure = this.r.canvas.getContext('2d')!;
-        measure.font = `${el.fontSize}px ${CANVAS_FONT}`;
-        const lines = wrapText(measure, text, Math.abs(el.w) - (el.kind === 'text' ? 0 : 44));
+        const { lines, leading, padding } = textLayout(measure, el, text);
         const next = { ...el, text };
         if (el.kind === 'text') {
-          next.h = Math.max(el.fontSize * 1.6, lines.length * el.fontSize * 1.55 + 4);
-          next.w = Math.max(24, ...lines.map(line => measure.measureText(line).width + 8));
+          next.h = Math.max(el.fontSize * 1.6, lines.length * leading + 4);
+          if (fresh) next.w = Math.max(24, ...lines.map(line => measure.measureText(line).width + 8));
         }
-        if (el.kind === 'note') next.h = Math.max(el.h, lines.length * el.fontSize * 1.55 + 44);
+        if (el.kind === 'note') next.h = Math.max(el.h, lines.length * leading + padding * 2);
+        if (el.rotation && (next.w !== el.w || next.h !== el.h)) {
+          const before = rotationCenter(el), after = rotationCenter(next);
+          const delta = { x: before.x - after.x, y: before.y - after.y };
+          const rotated = rotatePoint(delta, { x: 0, y: 0 }, el.rotation);
+          next.x += delta.x - rotated.x; next.y += delta.y - rotated.y;
+        }
         this.r.scene.apply([{ id: el.id, after: next }], '编辑文字');
       }
       this.r.state.selected = this.r.state.tool === 'select' ? new Set([el.id]) : new Set();
