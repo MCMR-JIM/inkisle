@@ -44,7 +44,7 @@ export class SelectionToolbar {
     if (right < left || bottom < top) { this.bar.hidden = true; this.close(); return; }
     this.bar.hidden = false;
     const width = this.bar.offsetWidth, height = this.bar.offsetHeight, margin = 12;
-    const blockers = [...document.querySelectorAll<HTMLElement>('.app-header, .toolbar, .tool-submenu:not([hidden]), #properties:not([hidden]), #expand-properties:not([hidden]), #group-navigation:not([hidden]), .bottom-left, .bottom-right')].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
+    const blockers = [...document.querySelectorAll<HTMLElement>('.app-header, .toolbar, .tool-submenu:not([hidden]), .pen-options:not([hidden]), #properties:not([hidden]), #expand-properties:not([hidden]), #group-navigation:not([hidden]), .bottom-left, .bottom-right')].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
     const clamp = (candidate: { x: number; y: number }): Rect => ({ x: Math.max(margin, Math.min(r.width - width - margin, candidate.x)), y: Math.max(margin, Math.min(r.height - height - margin, candidate.y)), width, height });
     const center = (left + right - width) / 2;
     const candidates = [clamp({ x: center, y: top - height - 14 }), clamp({ x: center, y: bottom + 14 }), clamp({ x: right + 14, y: (top + bottom - height) / 2 }), clamp({ x: left - width - 14, y: (top + bottom - height) / 2 })];

@@ -156,7 +156,8 @@ test('mouse simulation is zoom-independent and pressure settings fit desktop and
     await page.setViewportSize({ width, height: width === 390 ? 844 : 960 });
     for (let i = 0; i < 2; i++) {
       const toggle = page.getByRole('switch', { name: '压感', exact: true }), box = (await toggle.boundingBox())!;
-      expect(box.x).toBeGreaterThan(0); expect(box.x + box.width).toBeLessThan(width); expect(box.y + box.height).toBeLessThan(760);
+      const toolbar = (await page.locator('.toolbar').boundingBox())!;
+      expect(box.x).toBeGreaterThan(0); expect(box.x + box.width).toBeLessThan(width); expect(box.y + box.height).toBeLessThan(toolbar.y);
       await expect(toggle).toHaveAttribute('data-tooltip', /手写笔/);
       await expect(page.locator('#pressure-hint')).toHaveCount(0);
       await page.getByRole('button', { name: '切换主题', exact: true }).click();

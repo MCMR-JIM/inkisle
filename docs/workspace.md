@@ -18,6 +18,10 @@ Open **Workspace settings** from the header or board menu to place the tool tool
 
 Selecting a shape or line with a shortcut also reveals its family options. **Shift+R** toggles the shapes family; **Shift+L** toggles the lines family. Both bindings, along with group and ungroup, can be changed in shortcut settings.
 
+Clicking a shape or line category immediately activates its last-used child, defaulting to rectangle or line, and deselects the previous tool.
+
+Selecting the pen by clicking or pressing **P** opens pressure options beside the toolbar. Selecting existing ink also exposes pressure editing. The left style panel keeps a fixed title and control layout across tools and selections.
+
 On small screens, tools and shape options use multiple rows with larger touch targets.
 
 ## Board library

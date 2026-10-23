@@ -55,6 +55,7 @@ export class App {
   private exportingImage = false;
   private libraryMutation: Promise<void> = Promise.resolve();
   private toolFamilies = new ToolFamilyController(tool => this.setTool(tool));
+  private familyTools = new Map<string, Tool>();
   private startup = performance.now();
   private startupPhases: Record<string, number> = {};
   private firstSceneFrameMs = 0;
@@ -303,14 +304,19 @@ export class App {
     this.renderer.state.tool = tool;
     if (tool !== 'select') this.renderer.state.selected.clear();
     const family = familyForTool(tool);
-    if (family.children?.length) this.toolFamilies.open(family.id); else this.toolFamilies.close();
+    if (family.children?.length) this.familyTools.set(family.id, tool);
+    if (family.children?.length || family.id === 'pen') this.toolFamilies.open(family.id); else this.toolFamilies.close();
     this.renderToolState();
     this.interaction?.updateCursor(); this.renderer.invalidate(false); this.selectionChanged();
   }
 
   private toggleToolFamily(id: string, button: HTMLElement): void {
     const family = TOOL_FAMILIES.find(item => item.id === id)!;
+    if (id === 'pen' && this.renderer.state.tool === 'pen') { this.toolFamilies.toggle(id); this.renderToolState(); return; }
     if (!family.children?.length) { this.toolFamilies.close(); this.closeToolMenus(); this.setTool(id as Tool); return; }
+    if (familyForTool(this.renderer.state.tool).id !== id) {
+      this.setTool(this.familyTools.get(id) ?? (id === 'shapes' ? 'rect' : family.children[0].tool)); return;
+    }
     this.toolFamilies.toggle(id);
     this.closeToolMenus();
     if (this.toolFamilies.isOpen(id) && family.children?.length) {
@@ -318,6 +324,7 @@ export class App {
       button.setAttribute('aria-expanded', 'true');
       menu.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
     }
+    this.updatePenOptions();
   }
 
   private closeToolMenus(): void {
@@ -340,6 +347,16 @@ export class App {
       const active = item.dataset.toolChild === this.renderer.state.tool;
       item.classList.toggle('active', active); item.setAttribute('aria-selected', String(active));
     });
+    this.updatePenOptions();
+  }
+
+  private updatePenOptions(): void {
+    const elements = this.selected();
+    const inkSelected = elements.length > 0 && elements.every(el => el.kind === 'pen' || el.path?.strokes.some(stroke => stroke.pressureEnabled !== undefined));
+    const otherMenu = TOOL_FAMILIES.some(family => family.children?.length && this.toolFamilies.isOpen(family.id));
+    const open = !otherMenu && (inkSelected || (this.renderer.state.tool === 'pen' && this.toolFamilies.isOpen('pen')));
+    $('#pressure-setting').hidden = !open;
+    document.querySelector('[data-family="pen"]')?.setAttribute('aria-expanded', String(open));
   }
 
   private selected(): BoardElement[] { return [...this.renderer.state.selected].map(id => this.scene.get(id)).filter((el): el is BoardElement => !!el); }
@@ -366,13 +383,11 @@ export class App {
     document.querySelectorAll<HTMLButtonElement>('[data-align]').forEach(button => { button.disabled = units.filter(unit => !unit.elements.some(el => el.locked)).length < (['horizontal', 'vertical'].includes(button.dataset.align!) ? 3 : 2); });
     $('#group-navigation').hidden = !scope.length;
     $('#group-scope-label').textContent = `组合内 · 第 ${scope.length} 层`;
-    $('#property-title').textContent = elements.length ? '元素样式' : '画笔与样式';
     const style = first ?? this.styles;
     const fillColor = selectedFill(style, selectedFill(this.styles));
     $('#fill-toggle').setAttribute('aria-checked', String(elements.length ? elements.every(el => el.fill !== 'transparent') : this.styles.fill !== 'transparent'));
     $<HTMLButtonElement>('#fill-toggle').disabled = !!elements.length && elements.every(el => el.locked);
-    const isInk = (el: BoardElement): boolean => el.kind === 'pen' || !!el.path?.strokes.some(stroke => stroke.pressureEnabled !== undefined);
-    $('#pressure-setting').hidden = elements.length ? !elements.every(isInk) : this.renderer.state.tool !== 'pen';
+    this.updatePenOptions();
     $('#pressure-toggle').setAttribute('aria-checked', String(first ? !!first.pressureEnabled : this.styles.pressureEnabled !== false));
     $<HTMLButtonElement>('#pressure-toggle').disabled = !!elements.length && elements.every(el => el.locked);
     document.querySelectorAll<HTMLElement>('[data-color-index]').forEach(button => {
