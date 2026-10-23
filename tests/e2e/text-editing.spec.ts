@@ -8,8 +8,8 @@ async function seed(page: Page, element: BoardElement, zoom = 1): Promise<void> 
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
   await page.locator('#import-file').setInputFiles({ name: 'text.inkisle', mimeType: 'application/octet-stream', buffer: Buffer.from(encodeDocument(doc)) });
   await expect(page.locator('#toast')).toContainText('画板已导入');
-  // Exclude the blinking insertion caret and editing outline from glyph comparisons.
-  await page.addStyleTag({ content: '#text-editor { caret-color: transparent; outline: none; }' });
+  // Exclude the blinking insertion caret from glyph comparisons.
+  await page.addStyleTag({ content: '#text-editor { caret-color: transparent; }' });
 }
 
 async function inkBounds(page: Page) {
