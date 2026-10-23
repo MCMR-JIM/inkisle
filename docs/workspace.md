@@ -25,7 +25,11 @@ Selecting the pen by clicking or pressing **P** opens pressure options beside th
 
 The pen popover includes **Pen / Highlighter**. Highlighter defaults to yellow, a 20-unit width and 35% opacity, with uniform width. Its color, width and opacity can be adjusted through the existing style controls. Switching to ordinary pen or another tool restores the previous settings. The chosen pen mode is remembered locally; highlighter strokes support normal selection, erasing, undo and file/image export.
 
-On small screens, tools and shape options use multiple rows with larger touch targets.
+Tool option bars share icon-above-label buttons, size to their contents and stay horizontally centered. They wrap only when the viewport requires it. Pen pressure stays at the right, separated from pen choices by a short vertical rule.
+
+## Shared UI controls
+
+`src/ui/floating-bar.ts` renders option bars from options, separators and switches. Pen, shape, line, selection and alignment bars reuse this frame and its button styles; the fill switch and main/zoom toolbar separators reuse the same primitives. Tool-specific classes only provide anchoring. Add choices through option data rather than another toolbar template or stylesheet. The common layout observer keeps notifications clear of any visible tool bar, including wrapped options.
 
 ## Board library
 

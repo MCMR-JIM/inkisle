@@ -11,7 +11,8 @@ import { Renderer, type RenderState } from './engine/renderer';
 import { Interaction, isTextInput } from './engine/interaction';
 import { downloadBlob, exportDimensions, exportPNG, exportSVG, fileName, thumbnail, type ExportOptions } from './engine/export';
 import { buildShell, swatches } from './ui/shell';
-import { TOOL_FAMILIES, ToolFamilyController, familyForTool } from './ui/tool-families';
+import { TOOL_FAMILIES, ToolFamilyController, familyForTool, hasFamilyOptions } from './ui/tool-families';
+import { bindFloatingBars } from './ui/floating-bar';
 import { icon } from './ui/icons';
 import { CustomSelect } from './ui/custom-select';
 import { createDemo } from './demo';
@@ -69,6 +70,7 @@ export class App {
   constructor(root: HTMLElement) {
     if (readPreference('fill-enabled') === 'true') this.styles.fill = this.styles.fillColor;
     buildShell(root, this.palettes);
+    bindFloatingBars(root, $('.toolbar'));
     const position = readPreference('toolbar-position') === 'top' ? 'top' : 'bottom';
     document.documentElement.dataset.toolbarPosition = position;
     $<HTMLSelectElement>('#toolbar-position').value = position;
@@ -215,9 +217,9 @@ export class App {
       const penMode = target.closest<HTMLElement>('[data-pen-mode]')?.dataset.penMode;
       if (penMode === 'pen' || penMode === 'highlighter') { this.penMode = penMode; writePreference('pen-mode', penMode); this.setTool('pen'); return; }
       const familyElement = target.closest<HTMLElement>('[data-family]');
-      if (familyElement) { this.toggleToolFamily(familyElement.dataset.family!, familyElement); return; }
+      if (familyElement) { this.toggleToolFamily(familyElement.dataset.family!); return; }
       const childElement = target.closest<HTMLElement>('[data-tool-child]');
-      if (childElement) { this.toolFamilies.choose(childElement.dataset.toolChild as Tool); this.renderToolState(); return; }
+      if (childElement) { this.toolFamilies.choose(childElement.dataset.toolChild as Tool); return; }
       const tool = target.closest<HTMLElement>('[data-tool]')?.dataset.tool as Tool | undefined;
     if (tool) this.setTool(tool);
       const color = target.closest<HTMLElement>('[data-color-index]');
@@ -249,10 +251,6 @@ export class App {
     on('zoom-out', () => this.zoom(this.renderer.state.camera.zoom / 1.25)); on('zoom-in', () => this.zoom(this.renderer.state.camera.zoom * 1.25));
     on('zoom-value', () => this.zoom(1)); on('fit-button', () => this.fit());
     on('fill-toggle', () => this.toggleFill());
-    $('#pressure-setting').addEventListener('keydown', event => {
-      const button = (event.target as Element).closest<HTMLButtonElement>('[data-pen-mode]');
-      if (button && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); button.click(); }
-    });
     on('pressure-toggle', () => {
       const pressure = $('#pressure-toggle').getAttribute('aria-checked') !== 'true';
       this.styles.pressureEnabled = pressure; writePreference('pressure', String(pressure));
@@ -299,7 +297,7 @@ export class App {
     });
     document.addEventListener('keydown', event => this.keydown(event), true);
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { this.toolFamilies.close(); this.closeToolMenus(); this.renderToolState(); }
+      if (event.key === 'Escape') { this.toolFamilies.close(); this.renderToolState(); }
     });
     document.addEventListener('copy', event => this.copy(event));
     document.addEventListener('cut', event => { if (this.copy(event)) this.deleteSelection(); });
@@ -316,7 +314,7 @@ export class App {
     if (tool !== 'select') this.renderer.state.selected.clear();
     const family = familyForTool(tool);
     if (family.children?.length) this.familyTools.set(family.id, tool);
-    if (family.children?.length || family.id === 'pen') this.toolFamilies.open(family.id); else this.toolFamilies.close();
+    if (hasFamilyOptions(family)) this.toolFamilies.open(family.id); else this.toolFamilies.close();
     this.renderToolState();
     this.interaction?.updateCursor(); this.renderer.invalidate(false); this.selectionChanged();
   }
@@ -329,34 +327,18 @@ export class App {
     }
   }
 
-  private toggleToolFamily(id: string, button: HTMLElement): void {
+  private toggleToolFamily(id: string): void {
     const family = TOOL_FAMILIES.find(item => item.id === id)!;
-    if (id === 'pen' && this.renderer.state.tool === 'pen') { this.toolFamilies.toggle(id); this.renderToolState(); return; }
-    if (!family.children?.length) { this.toolFamilies.close(); this.closeToolMenus(); this.setTool(id as Tool); return; }
+    if (!hasFamilyOptions(family)) { this.setTool(id as Tool); return; }
     if (familyForTool(this.renderer.state.tool).id !== id) {
-      this.setTool(this.familyTools.get(id) ?? (id === 'shapes' ? 'rect' : family.children[0].tool)); return;
+      this.setTool(this.familyTools.get(id) ?? (id === 'shapes' ? 'rect' : family.children?.[0].tool ?? id as Tool)); return;
     }
     this.toolFamilies.toggle(id);
-    this.closeToolMenus();
-    if (this.toolFamilies.isOpen(id) && family.children?.length) {
-      const menu = $(`#tool-menu-${id}`); menu.hidden = false;
-      button.setAttribute('aria-expanded', 'true');
-      menu.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
-    }
-    this.updatePenOptions();
-  }
-
-  private closeToolMenus(): void {
-    document.querySelectorAll<HTMLElement>('.tool-submenu').forEach(menu => { menu.hidden = true; });
-    document.querySelectorAll<HTMLElement>('[data-family]').forEach(item => item.setAttribute('aria-expanded', 'false'));
+    this.renderToolMenus();
+    if (this.toolFamilies.isOpen(id)) document.querySelector<HTMLElement>(`[data-tool-menu="${id}"] [aria-selected="true"]`)?.focus();
   }
 
   private renderToolState(): void {
-    this.closeToolMenus();
-    for (const family of TOOL_FAMILIES) if (family.children?.length && this.toolFamilies.isOpen(family.id)) {
-      $(`#tool-menu-${family.id}`).hidden = false;
-      document.querySelector(`[data-family="${family.id}"]`)?.setAttribute('aria-expanded', 'true');
-    }
     const activeFamily = familyForTool(this.renderer.state.tool);
     document.querySelectorAll<HTMLElement>('[data-family]').forEach(button => {
       const active = button.dataset.family === activeFamily.id;
@@ -366,17 +348,16 @@ export class App {
       const active = item.dataset.toolChild === this.renderer.state.tool;
       item.classList.toggle('active', active); item.setAttribute('aria-selected', String(active));
     });
-    this.updatePenOptions();
+    this.renderToolMenus();
   }
 
-  private updatePenOptions(): void {
+  private renderToolMenus(): void {
     const elements = this.selected();
     const inkSelected = elements.length > 0 && elements.every(el => el.kind === 'pen' || el.path?.strokes.some(stroke => stroke.pressureEnabled !== undefined));
-    const otherMenu = TOOL_FAMILIES.some(family => family.children?.length && this.toolFamilies.isOpen(family.id));
-    const open = !otherMenu && (inkSelected || (this.renderer.state.tool === 'pen' && this.toolFamilies.isOpen('pen')));
-    $('#pressure-setting').hidden = !open;
+    const family = TOOL_FAMILIES.find(family => hasFamilyOptions(family) && this.toolFamilies.isOpen(family.id))?.id ?? (inkSelected ? 'pen' : null);
+    document.querySelectorAll<HTMLElement>('[data-tool-menu]').forEach(menu => { menu.hidden = menu.dataset.toolMenu !== family; });
+    document.querySelectorAll<HTMLElement>('[data-family]').forEach(button => button.setAttribute('aria-expanded', String(button.dataset.family === family)));
     document.querySelectorAll<HTMLElement>('[data-pen-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.penMode === this.penMode)));
-    document.querySelector('[data-family="pen"]')?.setAttribute('aria-expanded', String(open));
   }
 
   private selected(): BoardElement[] { return [...this.renderer.state.selected].map(id => this.scene.get(id)).filter((el): el is BoardElement => !!el); }
@@ -407,7 +388,7 @@ export class App {
     const fillColor = selectedFill(style, selectedFill(this.styles));
     $('#fill-toggle').setAttribute('aria-checked', String(elements.length ? elements.every(el => el.fill !== 'transparent') : this.styles.fill !== 'transparent'));
     $<HTMLButtonElement>('#fill-toggle').disabled = !!elements.length && elements.every(el => el.locked);
-    this.updatePenOptions();
+    this.renderToolMenus();
     $('#pressure-toggle').setAttribute('aria-checked', String(first ? !!first.pressureEnabled : this.styles.pressureEnabled !== false));
     $<HTMLButtonElement>('#pressure-toggle').disabled = (!!elements.length && elements.every(el => el.locked)) || (this.renderer.state.tool === 'pen' && this.penMode === 'highlighter');
     document.querySelectorAll<HTMLElement>('[data-color-index]').forEach(button => {
@@ -580,7 +561,7 @@ export class App {
   }
 
   private runShortcut(action: string, amount = 1): void {
-    if (action.startsWith('family:')) { const family = action.slice(7); this.toggleToolFamily(family, document.querySelector(`[data-family="${family}"]`)!); return; }
+    if (action.startsWith('family:')) { this.toggleToolFamily(action.slice(7)); return; }
     if (action.startsWith('tool:')) { this.setTool(action.slice(5) as Tool); return; }
     if (action === 'color-next' || action === 'color-previous') {
       const style = this.selected()[0] ?? this.styles;

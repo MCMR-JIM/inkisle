@@ -1,13 +1,21 @@
 import type { Tool } from '../core/model';
 import { icon } from './icons';
+import { floatingBarMarkup, type FloatingBarItem } from './floating-bar';
 
 export interface ToolChild { tool: Tool; label: string; icon: string; key?: string }
-export interface ToolFamily { id: string; label: string; icon: string; key?: string; children?: ToolChild[] }
+export interface ToolFamily { id: string; label: string; icon: string; key?: string; children?: ToolChild[]; options?: FloatingBarItem[]; menuId?: string }
 
 export const TOOL_FAMILIES: ToolFamily[] = [
   { id: 'select', label: '选择工具', icon: 'select', key: 'V' },
   { id: 'hand', label: '抓手', icon: 'hand', key: 'H' },
-  { id: 'pen', label: '画笔', icon: 'pen', key: 'P' },
+  { id: 'pen', label: '画笔', icon: 'pen', key: 'P', menuId: 'pressure-setting', options: [
+    { type: 'option', label: '画笔', ariaLabel: '普通画笔', icon: 'pen', attributes: { 'data-pen-mode': 'pen', 'aria-pressed': 'true' } },
+    { type: 'option', label: '荧光笔', icon: 'highlighter', attributes: { 'data-pen-mode': 'highlighter', 'aria-pressed': 'false' } },
+    { type: 'group', items: [
+      { type: 'separator' },
+      { type: 'switch', id: 'pressure-toggle', labelId: 'pressure-label', label: '压感', checked: true, tooltip: '手写笔感应力度，鼠标慢画粗、快画细' },
+    ] },
+  ] },
   { id: 'shapes', label: '图形', icon: 'rect', children: [
     { tool: 'recognize', label: '轨迹识别', icon: 'recognize' },
     { tool: 'rect', label: '矩形', icon: 'rect', key: 'R' }, { tool: 'roundrect', label: '圆角矩形', icon: 'roundrect' },
@@ -48,6 +56,9 @@ export function familyButtonMarkup(family: ToolFamily): string {
 }
 
 export function familyMenuMarkup(family: ToolFamily): string {
-  if (!family.children?.length) return '';
-  return `<div class="tool-submenu panel" id="tool-menu-${family.id}" role="menu" aria-label="${family.label}工具" hidden>${family.children.map(child => `<button role="button" data-tool-child="${child.tool}" aria-label="${child.label}" data-tooltip="${child.label}${child.key ? `  ${child.key}` : ''}">${icon(child.icon, 19)}<span>${child.label}</span>${child.key ? `<kbd>${child.key}</kbd>` : ''}</button>`).join('')}</div>`;
+  const items = family.options ?? family.children?.map<FloatingBarItem>(child => ({ type: 'option', label: child.label, icon: child.icon, shortcut: child.key, attributes: { 'data-tool-child': child.tool } }));
+  if (!items?.length) return '';
+  return floatingBarMarkup({ id: family.menuId ?? `tool-menu-${family.id}`, label: `${family.label}工具`, role: 'menu', className: 'tool-submenu', attributes: { 'data-tool-menu': family.id }, items });
 }
+
+export function hasFamilyOptions(family: ToolFamily): boolean { return !!(family.options?.length || family.children?.length); }

@@ -3,6 +3,7 @@ import { icon, logo } from './icons';
 import { TOOL_FAMILIES, familyButtonMarkup, familyMenuMarkup } from './tool-families';
 import { colorInk } from '../core/colors';
 import { PRODUCT } from '../core/product';
+import { barSeparatorMarkup, floatingBarMarkup, toggleSwitchMarkup } from './floating-bar';
 
 const button = (id: string, glyph: string, label: string, extra = '') => `<button id="${id}" class="icon-button" aria-label="${label}" data-tooltip="${label}" ${extra}>${icon(glyph)}</button>`;
 
@@ -31,15 +32,14 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       </div>
     </header>
     <div class="toolbar panel" role="toolbar" aria-label="白板工具">
-      ${TOOL_FAMILIES.map((family, i) => `${i === 3 || i === 5 ? '<span class="tool-separator"></span>' : ''}${familyButtonMarkup(family)}`).join('')}
+      ${TOOL_FAMILIES.map((family, i) => `${i === 3 || i === 5 ? barSeparatorMarkup() : ''}${familyButtonMarkup(family)}`).join('')}
       ${TOOL_FAMILIES.map(familyMenuMarkup).join('')}
-      <div id="pressure-setting" class="pen-options panel" role="group" aria-label="画笔选项" hidden><div class="pen-modes" role="group" aria-label="笔类型"><button type="button" data-pen-mode="pen" aria-label="普通画笔" aria-pressed="true">${icon('pen', 16)}画笔</button><button type="button" data-pen-mode="highlighter" aria-label="荧光笔" aria-pressed="false">${icon('highlighter', 16)}荧光笔</button></div><label id="pressure-label" for="pressure-toggle">压感</label><button id="pressure-toggle" class="pressure-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="pressure-label" data-tooltip="手写笔感应力度，鼠标慢画粗、快画细"><span></span></button></div>
     </div>
     <aside id="properties" class="properties panel" aria-label="样式设置">
       <div class="panel-heading"><span>${icon('settings', 16)}<span id="property-title">样式设置</span></span><button id="collapse-properties" class="tiny-button" aria-label="收起样式">${icon('minus', 15)}</button></div>
       <div id="property-content">
         <div class="property-group"><div class="color-group-heading"><span id="stroke-label">描边</span><button id="stroke-palette" class="palette-button" type="button" aria-label="描边调色板" aria-pressed="false">${icon('palette', 16)}</button></div><div class="swatches" id="stroke-colors" role="group" aria-labelledby="stroke-label">${swatches(palettes.stroke, 'stroke')}</div></div>
-        <div class="property-group"><div class="color-group-heading"><span id="fill-label">填充</span><div class="fill-heading-actions"><button id="fill-toggle" class="pressure-toggle" type="button" role="switch" aria-checked="false" aria-labelledby="fill-label" data-tooltip="关闭填充显示透明，开启填充使用选中的颜色"><span></span></button><button id="fill-palette" class="palette-button" type="button" aria-label="填充调色板" aria-pressed="false">${icon('palette', 16)}</button></div></div><div class="swatches" id="fill-colors" role="group" aria-labelledby="fill-label">${swatches(palettes.fill, 'fill')}</div></div>
+        <div class="property-group"><div class="color-group-heading"><span id="fill-label">填充</span><div class="fill-heading-actions">${toggleSwitchMarkup('fill-toggle', 'fill-label', false, '关闭填充显示透明，开启填充使用选中的颜色')}<button id="fill-palette" class="palette-button" type="button" aria-label="填充调色板" aria-pressed="false">${icon('palette', 16)}</button></div></div><div class="swatches" id="fill-colors" role="group" aria-labelledby="fill-label">${swatches(palettes.fill, 'fill')}</div></div>
         <div class="property-group"><label>线条粗细</label><div class="segmented" id="stroke-widths">${[1, 2, 4, 7].map(w => `<button data-width="${w}" aria-label="线宽 ${w}" class="${w === 2 ? 'active' : ''}"><span style="height:${Math.min(w, 5)}px"></span></button>`).join('')}</div></div>
         <div class="property-group property-row"><label>线条样式</label><div class="mini-segmented"><button data-dash="false" class="active" aria-label="实线">━</button><button data-dash="true" aria-label="虚线">┄</button></div></div>
         <div class="property-group property-row"><label for="font-size">文字大小</label><button id="font-size" aria-label="文字大小"></button></div>
@@ -48,16 +48,16 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       </div>
     </aside>
     <div id="selection-status" class="visually-hidden" role="status" hidden><span id="selection-label"></span></div>
-    <div id="selection-toolbar" class="selection-toolbar panel" role="toolbar" aria-label="选区操作" hidden>
-      <button id="group-button" data-tooltip="组合 · Ctrl + G">组合</button><button id="ungroup-button" data-tooltip="取消组合 · Ctrl + Shift + G">解组</button>
-      <button id="alignment-trigger" aria-expanded="false" aria-controls="alignment-controls">对齐与分布 ${icon('chevron', 14)}</button>
-      <div id="alignment-controls" class="selection-alignment-menu panel" role="group" aria-label="对齐与分布" hidden>${[['left', '左对齐'], ['center', '水平居中'], ['right', '右对齐'], ['top', '顶端对齐'], ['middle', '垂直居中'], ['bottom', '底端对齐'], ['horizontal', '水平等距'], ['vertical', '垂直等距']].map(([action, label]) => `<button data-align="${action}" aria-label="${label}">${label}</button>`).join('')}</div>
-    </div>
+    ${floatingBarMarkup({ id: 'selection-toolbar', label: '选区操作', className: 'selection-toolbar', layout: 'compact', spaceActivates: true, items: [
+      { type: 'option', label: '组合', attributes: { id: 'group-button' } },
+      { type: 'option', label: '解组', attributes: { id: 'ungroup-button' } },
+      { type: 'option', label: '对齐与分布', endIcon: 'chevron', attributes: { id: 'alignment-trigger', 'aria-expanded': 'false', 'aria-controls': 'alignment-controls' } },
+    ], contentAfter: floatingBarMarkup({ id: 'alignment-controls', label: '对齐与分布', className: 'selection-alignment-menu', role: 'group', layout: 'grid', spaceActivates: true, items: [['left', '左对齐'], ['center', '水平居中'], ['right', '右对齐'], ['top', '顶端对齐'], ['middle', '垂直居中'], ['bottom', '底端对齐'], ['horizontal', '水平等距'], ['vertical', '垂直等距']].map(([action, label]) => ({ type: 'option', label, attributes: { 'data-align': action } })) }) })}
     <button id="expand-properties" class="panel icon-button expand-properties" aria-label="展开样式" hidden>${icon('settings')}</button>
     <div id="group-navigation" class="group-navigation panel" hidden><span id="group-scope-label"></span><button id="exit-group" class="button button-subtle">退出一层 <kbd>Esc</kbd></button></div>
     <div id="empty-state" class="empty-state" hidden><div class="empty-mark">${logo}</div><h1>好想法，在${PRODUCT.name}生长。</h1><p>随手画一笔，或按 <kbd>N</kbd> 贴下第一个灵感。</p><div><button class="button button-subtle" id="add-first-note">${icon('note', 16)}贴一张便签</button><button class="text-button" id="show-example">看看示例 ${icon('arrowRight', 15)}</button></div></div>
     <div class="bottom-left"><div class="history-controls panel">${button('undo-button', 'undo', '撤销')}${button('redo-button', 'redo', '重做')}</div>${button('help-button', 'keyboard', '快捷键帮助')}<span class="local-badge"><span></span>本地优先 <span class="badge-divider">/</span> 自由创作</span></div>
-    <div class="bottom-right"><span id="element-count">0 个元素</span><div class="zoom-controls panel">${button('zoom-out', 'minus', '缩小')}<button id="zoom-value" class="zoom-value" aria-label="重置缩放">100%</button>${button('zoom-in', 'plus', '放大')}<span class="tool-separator"></span>${button('fit-button', 'fit', '适应画布')}</div></div>
+    <div class="bottom-right"><span id="element-count">0 个元素</span><div class="zoom-controls panel">${button('zoom-out', 'minus', '缩小')}<button id="zoom-value" class="zoom-value" aria-label="重置缩放">100%</button>${button('zoom-in', 'plus', '放大')}${barSeparatorMarkup()}${button('fit-button', 'fit', '适应画布')}</div></div>
     <div class="menu panel" id="document-menu" hidden>
       <button data-action="new">${icon('plus', 17)}新建画板<kbd>Ctrl Alt N</kbd></button>
       <button data-action="library">${icon('library', 17)}我的画板</button>
