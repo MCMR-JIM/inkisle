@@ -29,6 +29,15 @@ describe('versioned document container', () => {
 });
 
 describe('incremental repository', () => {
+  it('retains paper layout through metadata writes, compaction and source-file encoding', async () => {
+    const repo = new Repository(`layout-${crypto.randomUUID()}`), doc = createDocument('Paper');
+    doc.paperLayout = 'double'; await repo.create(doc);
+    expect((await repo.load(doc.id))?.paperLayout).toBe('double');
+    await repo.append(doc.id, [], { paperLayout: 'single' });
+    const loaded = (await repo.load(doc.id))!; expect(loaded.paperLayout).toBe('single');
+    expect(decodeDocument(encodeDocument(loaded)).paperLayout).toBe('single');
+    await repo.compact(loaded); expect((await repo.load(doc.id))?.paperLayout).toBe('single'); repo.close();
+  });
   it('recovers edits and deletions after reopening, then compacts without duplicating entities', async () => {
     const name = `test-${crypto.randomUUID()}`;
     const repo = new Repository(name);

@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 test('a selected line keeps its original ink and gains only a soft blue halo', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '线条');
   await page.locator('[data-property="stroke"][data-color="#e28165"]').click();
   await page.locator('[data-width="7"]').click();

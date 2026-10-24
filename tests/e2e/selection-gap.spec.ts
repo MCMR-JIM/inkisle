@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 test('a shape frame has a five-pixel air gap and its handles remain on the frame', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '矩形');
   await page.locator('[data-width="7"]').click();
   await page.evaluate(() => {

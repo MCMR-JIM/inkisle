@@ -1,11 +1,28 @@
-import { createElement, type BoardElement, type Bounds, type Change } from './model';
-import { containsBounds, elementBounds } from './geometry';
+import { createElement, type BoardDocument, type BoardElement, type Bounds, type Change, type PageLayout } from './model';
+import { containsBounds, elementBounds, unionBounds } from './geometry';
 import { selectionUnits } from './groups';
 
-export type PaperLayout = 'single' | 'double';
+export type PaperLayout = Exclude<PageLayout, 'infinite'>;
 export const PAPER_GAP = 40;
 let paperSequence = 0;
 export const paperPages = (elements: BoardElement[]): BoardElement[] => elements.filter(el => el.kind === 'paper');
+
+/** Geometry follows undo/redo; metadata retains a layout with fewer than two sheets. */
+export function documentPaperLayout(doc: Pick<BoardDocument, 'elements' | 'paperLayout'>): PageLayout {
+  const pages = paperPages(doc.elements);
+  if (pages.length > 1) return pages.some(page => Math.abs(elementBounds(page).x - elementBounds(pages[0]).x) > 1) ? 'double' : 'single';
+  return pages.length ? doc.paperLayout === 'double' ? 'double' : 'single' : doc.paperLayout ?? 'infinite';
+}
+
+export function appendPaperChanges(elements: BoardElement[], added: BoardElement[], layout: PaperLayout): Change[] {
+  const pages = paperPages(elements);
+  const content = unionBounds(elements);
+  const origin = pages.length ? { x: Math.min(...pages.map(p => elementBounds(p).x)), y: Math.min(...pages.map(p => elementBounds(p).y)) } : content ? { x: content.x, y: content.y + content.h + PAPER_GAP } : { x: 300, y: 120 };
+  const placed = paperPositions([...pages, ...added], layout, origin);
+  const unchanged = pages.every((p, i) => Math.abs(p.x - placed[i].x) < .01 && Math.abs(p.y - placed[i].y) < .01);
+  const next = unchanged ? placed.slice(pages.length) : paperPositions(added, layout, { x: origin.x, y: Math.max(...pages.map(p => { const b = elementBounds(p); return b.y + b.h; })) + PAPER_GAP });
+  return next.map(after => ({ id: after.id, after }));
+}
 
 export function createPaper(x = 0, y = 0, sourceId?: string, sourcePage?: number): BoardElement {
   return createElement('paper', { x, y, w: 595.28, h: 841.89, order: -1e15 + Date.now() * 100 + paperSequence++, locked: true, strokeWidth: 0, fill: '#ffffff', paper: { margin: 96, ...(sourceId ? { sourceId, sourcePage } : {}) } });

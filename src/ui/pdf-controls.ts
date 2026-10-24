@@ -1,9 +1,8 @@
-import type { BoardDocument, Bounds, Change } from '../core/model';
-import { createPaper, PAPER_GAP, paperAssignments, paperLayoutChanges, paperPages, type PaperLayout } from '../core/paper';
+import type { BoardDocument, Bounds, Change, PageLayout } from '../core/model';
+import { appendPaperChanges, createPaper, documentPaperLayout, paperAssignments, paperLayoutChanges, paperPages, type PaperLayout } from '../core/paper';
 import { elementBounds, unionBounds } from '../core/geometry';
 import { downloadBlob, fileName } from '../engine/export';
 import { resetPaperResources } from '../engine/paper-render';
-import { CustomSelect } from './custom-select';
 
 interface PdfHost {
   document(): BoardDocument;
@@ -12,13 +11,12 @@ interface PdfHost {
   view(bounds: Bounds): void;
   notify(message: string): void;
   invalidate(): void;
-  newBoard(name: string): Promise<void>;
+  setLayout(layout: PageLayout): void;
 }
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 export class PdfControls {
-  private source: { id: string; count: number; name: string } | null = null;
-  private target: CustomSelect<'new' | 'current'>;
+  private source: { id: string; count: number; boardId: string } | null = null;
   private exporting: AbortController | null = null;
   private importing = false;
   private boardId = '';
@@ -26,21 +24,21 @@ export class PdfControls {
   private current = 0;
 
   constructor(private host: PdfHost) {
-    this.target = new CustomSelect($<HTMLButtonElement>('pdf-import-target'), [{ value: 'new', label: '新画板' }, { value: 'current', label: '当前画板' }], 'new', () => {});
     $('pdf-single').addEventListener('click', () => { void this.layout('single'); });
     $('pdf-double').addEventListener('click', () => { void this.layout('double'); });
-    $('pdf-previous').addEventListener('click', () => this.go(this.current - 1));
-    $('pdf-next').addEventListener('click', () => this.go(this.current + 1));
-    $('pdf-jump').addEventListener('change', () => this.go($<HTMLInputElement>('pdf-jump').valueAsNumber - 1));
-    $('pdf-add-paper').addEventListener('click', () => this.addPaper());
+    $('pdf-previous').addEventListener('click', () => this.focusPage(this.current - 1));
+    $('pdf-next').addEventListener('click', () => this.focusPage(this.current + 1));
+    $('pdf-jump').addEventListener('change', () => this.focusPage($<HTMLInputElement>('pdf-jump').valueAsNumber - 1));
     $('pdf-remove-paper').addEventListener('click', () => this.removePaper());
     $('pdf-locate-overflow').addEventListener('click', () => {
       const el = paperAssignments(this.host.document().elements).overflow[0]; if (el) this.host.view(elementBounds(el));
     });
     $('pdf-import-form').addEventListener('submit', event => { event.preventDefault(); void this.confirmImport(); });
+    $<HTMLDialogElement>('pdf-import-dialog').addEventListener('close', () => { this.source = null; });
     $('pdf-export-form').addEventListener('submit', event => { event.preventDefault(); void this.confirmExport(); });
     $<HTMLDialogElement>('pdf-export-dialog').addEventListener('close', () => this.exporting?.abort());
     $('pdf-cancel-export').addEventListener('click', () => $<HTMLDialogElement>('pdf-export-dialog').close());
+    new ResizeObserver(() => document.documentElement.style.setProperty('--page-navigation-height', `${$('pdf-navigation').offsetHeight}px`)).observe($('pdf-navigation'));
   }
 
   update(): void {
@@ -55,15 +53,18 @@ export class PdfControls {
       if (sources.length) void import('../engine/pdf').then(pdf => { if (this.resourceKey === resourceKey) { pdf.activatePdf(() => this.host.invalidate()); this.host.invalidate(); } });
     }
     $('pdf-navigation').hidden = !pages.length;
+    document.documentElement.dataset.hasPaper = String(!!pages.length);
     if (!pages.length) return;
     this.current = Math.min(this.current, pages.length - 1);
     const { overflow } = paperAssignments(doc.elements);
-    const double = pages.length > 1 && Math.abs(pages[0].y - pages[1].y) < 1;
+    const mode = documentPaperLayout(doc), double = mode === 'double';
+    if (doc.paperLayout !== mode) this.host.setLayout(mode);
     $('pdf-single').setAttribute('aria-pressed', String(!double));
     $('pdf-double').setAttribute('aria-pressed', String(double));
     $<HTMLButtonElement>('pdf-single').disabled = !!overflow.length;
     $<HTMLButtonElement>('pdf-double').disabled = !!overflow.length;
-    $('pdf-overflow-status').textContent = overflow.length ? `${overflow.length} 个对象越界，暂不能切换布局` : '外框内可导出';
+    $('pdf-overflow-status').textContent = overflow.length ? `${overflow.length} 个对象越界` : '';
+    $('pdf-boundary-status').hidden = !overflow.length;
     $('pdf-locate-overflow').hidden = !overflow.length;
     const field = $<HTMLInputElement>('pdf-jump'); field.max = String(pages.length); field.value = String(this.current + 1);
     $('pdf-page-total').textContent = `/ ${pages.length}`;
@@ -72,18 +73,14 @@ export class PdfControls {
   }
 
   private async layout(layout: PaperLayout): Promise<void> {
-    try { await this.host.settle(); const changes = paperLayoutChanges(this.host.document().elements, layout); this.host.apply(changes, layout === 'single' ? '单页连续布局' : '双页连续布局'); this.update(); this.go(this.current); }
+    try { await this.host.settle(); const changes = paperLayoutChanges(this.host.document().elements, layout); this.host.apply(changes, layout === 'single' ? '单页连续布局' : '双页连续布局'); this.host.setLayout(layout); this.update(); this.focusPage(this.current); }
     catch (error) { this.host.notify(error instanceof Error ? error.message : String(error)); }
   }
 
-  private origin(): { x: number; y: number } {
-    const pages = paperPages(this.host.document().elements);
-    return pages.length ? { x: Math.min(...pages.map(p => elementBounds(p).x)), y: Math.max(...pages.map(p => { const b = elementBounds(p); return b.y + b.h; })) + PAPER_GAP } : { x: 300, y: 120 };
-  }
-
   addPaper(): void {
-    const origin = this.origin(), page = createPaper(origin.x + 96, origin.y + 96);
-    this.host.apply([{ id: page.id, after: page }], '添加纸张'); this.update(); this.go(paperPages(this.host.document().elements).length - 1);
+    const doc = this.host.document(), mode = documentPaperLayout(doc), layout = mode === 'double' ? 'double' : 'single';
+    this.host.apply(appendPaperChanges(doc.elements, [createPaper()], layout), '添加纸张');
+    this.host.setLayout(layout); this.update(); this.focusPage(paperPages(this.host.document().elements).length - 1);
   }
 
   private removePaper(): void {
@@ -93,11 +90,11 @@ export class PdfControls {
     this.host.apply(removed.map(el => ({ id: el.id, after: null })), '删除纸张及页内内容'); this.update();
   }
 
-  private go(index: number): void {
+  focusPage(index = 0): void {
     const pages = paperPages(this.host.document().elements); if (!pages.length) return;
     this.current = Math.min(pages.length - 1, Math.max(0, Math.round(Number.isFinite(index) ? index : 0)));
-    const double = pages.length > 1 && Math.abs(pages[0].y - pages[1].y) < 1;
-    const row = double ? pages.slice(Math.floor(this.current / 2) * 2, Math.floor(this.current / 2) * 2 + 2) : [pages[this.current]];
+    const current = pages[this.current], double = documentPaperLayout(this.host.document()) === 'double';
+    const row = double ? pages.filter(page => Math.abs(elementBounds(page).y - elementBounds(current).y) < 1) : [current];
     this.host.view(unionBounds(row)!); this.update();
   }
 
@@ -108,7 +105,7 @@ export class PdfControls {
       const pdf = await import('../engine/pdf');
       const source = await pdf.inspectPdf(file);
       if (this.host.document().id !== boardId) throw new Error('画板已切换，请重新导入 PDF');
-      this.source = { ...source, name: file.name.replace(/\.pdf$/i, '').slice(0, 100) };
+      this.source = { ...source, boardId };
       $('pdf-import-summary').textContent = `${file.name} · ${source.count} 页`;
       $<HTMLInputElement>('pdf-import-range').value = `1-${source.count}`;
       $('pdf-import-status').textContent = '';
@@ -119,16 +116,24 @@ export class PdfControls {
 
   private async confirmImport(): Promise<void> {
     if (!this.source || this.importing) return;
-    const button = $<HTMLButtonElement>('pdf-confirm-import'); button.disabled = true;
+    const source = this.source, button = $<HTMLButtonElement>('pdf-confirm-import'); button.disabled = true; this.importing = true;
     try {
-      const pdf = await import('../engine/pdf'); const range = pdf.parsePageRange($<HTMLInputElement>('pdf-import-range').value, this.source.count);
-      const source = this.source;
-      if (this.target.value === 'new') await this.host.newBoard(source.name);
-      const origin = this.origin(); const pages = pdf.importedPages(this.source.id, range, origin.x, origin.y);
-      this.host.apply(pages.map(after => ({ id: after.id, after })), '导入 PDF');
-      this.source = null; $<HTMLDialogElement>('pdf-import-dialog').close(); this.update(); this.go(paperPages(this.host.document().elements).length - pages.length);
+      await this.host.settle();
+      const pdf = await import('../engine/pdf'), doc = this.host.document();
+      if (doc.id !== source.boardId) throw new Error('画板已切换，请重新导入 PDF');
+      if (source !== this.source) return;
+      const range = pdf.parsePageRange($<HTMLInputElement>('pdf-import-range').value, source.count);
+      const pages = pdf.importedPages(source.id, range, 0, 0), existing = paperPages(doc.elements);
+      const layout = documentPaperLayout(doc) === 'double' && paperAssignments(doc.elements).overflow.length ? 'double' : 'single';
+      const inserted = appendPaperChanges(doc.elements, pages, layout), changes = new Map(inserted.map(change => [change.id, change]));
+      if (existing.length && layout === 'single') {
+        const combined = [...doc.elements, ...inserted.map(change => change.after!)];
+        if (!paperAssignments(combined).overflow.length) for (const change of paperLayoutChanges(combined, layout)) changes.set(change.id, change);
+      }
+      this.host.apply([...changes.values()], '导入 PDF'); this.host.setLayout(layout);
+      $<HTMLDialogElement>('pdf-import-dialog').close(); this.update(); this.focusPage(existing.length);
     } catch (error) { $('pdf-import-status').textContent = error instanceof Error ? error.message : String(error); }
-    finally { button.disabled = false; }
+    finally { button.disabled = false; this.importing = false; }
   }
 
   openExport(): void {

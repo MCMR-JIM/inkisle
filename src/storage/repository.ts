@@ -5,10 +5,11 @@ import { PRODUCT } from '../core/product';
 interface StoredBoard extends BoardMeta {
   camera: Camera;
   background: string;
+  paperLayout?: BoardDocument['paperLayout'];
   revision: number;
 }
 interface LogEntry { key?: number; boardId: string; changes: Change[] }
-export type MetadataPatch = Partial<Pick<BoardDocument, 'title' | 'camera' | 'background'>> & { thumbnail?: string; elementCount?: number };
+export type MetadataPatch = Partial<Pick<BoardDocument, 'title' | 'camera' | 'background' | 'paperLayout'>> & { thumbnail?: string; elementCount?: number };
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -63,8 +64,8 @@ export class Repository {
     const db = await this.open();
     const tx = db.transaction(['boards', 'snapshots'], 'readwrite');
     const complete = done(tx);
-    const { id, title, created, updated, camera, background } = doc;
-    tx.objectStore('boards').add({ id, title, created, updated, camera, background, revision: 0, elementCount: doc.elements.length, thumbnail } satisfies StoredBoard);
+    const { id, title, created, updated, camera, background, paperLayout } = doc;
+    tx.objectStore('boards').add({ id, title, created, updated, camera, background, paperLayout, revision: 0, elementCount: doc.elements.length, thumbnail } satisfies StoredBoard);
     tx.objectStore('snapshots').add({ id, data: snapshot });
     await complete;
     this.revisions.set(id, 0);
@@ -88,7 +89,7 @@ export class Repository {
     for (const log of logs) for (const c of log.changes) {
       if (c.after) elements.set(c.id, c.after); else elements.delete(c.id);
     }
-    return { ...doc, title: board.title, updated: board.updated, camera: board.camera, background: board.background, elements: [...elements.values()].sort(compareElements) };
+    return { ...doc, title: board.title, updated: board.updated, camera: board.camera, background: board.background, paperLayout: board.paperLayout ?? doc.paperLayout, elements: [...elements.values()].sort(compareElements) };
   }
 
   async list(): Promise<BoardMeta[]> {
@@ -131,7 +132,7 @@ export class Repository {
     const db = await this.open();
     const tx = db.transaction(['boards', 'snapshots', 'logs'], 'readwrite');
     const complete = done(tx);
-    const { id, title, created, camera, background } = doc;
+    const { id, title, created, camera, background, paperLayout } = doc;
     const boards = tx.objectStore('boards');
     const req = boards.get(id) as IDBRequest<StoredBoard | undefined>;
     let failure: Error | null = null;
@@ -143,7 +144,7 @@ export class Repository {
         failure = new Error('画板已在另一个窗口更新，请先导出当前内容，再刷新页面'); tx.abort(); return;
       }
       nextRevision = revision + 1;
-      boards.put({ id, title, created, updated: Date.now(), camera, background, revision: nextRevision, elementCount: doc.elements.length, thumbnail } satisfies StoredBoard);
+      boards.put({ id, title, created, updated: Date.now(), camera, background, paperLayout, revision: nextRevision, elementCount: doc.elements.length, thumbnail } satisfies StoredBoard);
       tx.objectStore('snapshots').put({ id, data: snapshot });
       const logs = tx.objectStore('logs');
       const keys = logs.index('boardId').getAllKeys(id);

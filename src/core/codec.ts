@@ -36,6 +36,7 @@ export function validateDocument(input: unknown): asserts input is BoardDocument
   assert(finite(doc.created, 1e16) && finite(doc.updated, 1e16));
   assert(doc.camera && finite(doc.camera.x) && finite(doc.camera.y) && finite(doc.camera.zoom) && doc.camera.zoom >= MIN_ZOOM && doc.camera.zoom <= MAX_ZOOM);
   assert(typeof doc.background === 'string' && color.test(doc.background));
+  assert(doc.paperLayout === undefined || ['infinite', 'single', 'double'].includes(doc.paperLayout));
   assert(Array.isArray(doc.elements) && doc.elements.length <= 100000);
   const ids = new Set<string>();
   const parents = new Map<string, string>();

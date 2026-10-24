@@ -3,6 +3,7 @@ export type Tool = Exclude<ElementKind, 'path' | 'paper'> | 'select' | 'hand' | 
 export interface Point { x: number; y: number; pressure?: number }
 export interface Bounds { x: number; y: number; w: number; h: number }
 export interface Camera { x: number; y: number; zoom: number }
+export type PageLayout = 'infinite' | 'single' | 'double';
 /** Element-local swept ellipses. Separate radii preserve non-uniform resizing. */
 export interface Erasure { points: Point[]; radiusX: number; radiusY: number }
 export interface StrokePath { points: Point[]; closed: boolean; pressureEnabled?: boolean }
@@ -49,6 +50,7 @@ export interface BoardDocument {
   updated: number;
   camera: Camera;
   background: string;
+  paperLayout?: PageLayout;
   elements: BoardElement[];
 }
 
@@ -82,7 +84,7 @@ export function createDocument(title = '未命名画板'): BoardDocument {
   const now = Date.now();
   return {
     id: crypto.randomUUID(), title, created: now, updated: now,
-    camera: { x: 0, y: 0, zoom: 1 }, background: '#f8f9f6', elements: [],
+    camera: { x: 0, y: 0, zoom: 1 }, background: '#f8f9f6', paperLayout: 'infinite', elements: [],
   };
 }
 

@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool, contextAction } from './helpers';
+import { createBoard, chooseTool, contextAction } from './helpers';
 
 test('creates a drawing, edits it, undoes and restores it from local storage', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('button', { name: '选择工具', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await expect(page.locator('#board-title')).toHaveValue('未命名画板');
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300);
@@ -33,7 +33,7 @@ test('creates a drawing, edits it, undoes and restores it from local storage', a
 test('exports a file, imports it as a new board and supports keyboard selection', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#canvas')).toBeVisible();
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '便签');
   await page.mouse.click(600, 400);
   await page.locator('#text-editor').fill('保存我的灵感');
@@ -56,7 +56,7 @@ test('exports a file, imports it as a new board and supports keyboard selection'
 
 test('pen, zoom, theme and shortcut settings work without runtime errors', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '画笔');
   await page.mouse.move(450, 400);
   await page.mouse.down();
@@ -75,7 +75,7 @@ test('pen, zoom, theme and shortcut settings work without runtime errors', async
 
 test('dragging a selection only redraws the static scene at the start and end of the gesture', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 420); await page.mouse.up();
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
@@ -96,19 +96,19 @@ test('dragging a selection only redraws the static scene at the start and end of
   expect(paintsDuringDrag).toBeLessThanOrEqual(2);
 });
 
-test('welcome canvas and mobile controls fit in the viewport', async ({ page }, testInfo) => {
+test('welcome canvas and desktop controls fit in the viewport', async ({ page }, testInfo) => {
   await page.goto('/');
   await expect(page.locator('#element-count')).not.toHaveText('0 个元素');
   await page.screenshot({ path: testInfo.outputPath('welcome-desktop.png') });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1024, height: 844 });
   await expect(page.getByRole('button', { name: '选择工具', exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('welcome-mobile.png') });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: testInfo.outputPath('welcome-compact-desktop.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1024);
 });
 
 test('a pointer update is painted within its first animation frame', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '矩形');
   const painted = await page.evaluate(async () => {
     const target = document.querySelector<HTMLCanvasElement>('#interaction-canvas')!;
@@ -134,7 +134,7 @@ test('a pointer update is painted within its first animation frame', async ({ pa
 
 test('exports valid PNG and SVG assets and supports image insertion', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
   await page.locator('#image-file').setInputFiles({ name: 'pixel.png', mimeType: 'image/png', buffer: image });
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
@@ -164,7 +164,7 @@ test('exports valid PNG and SVG assets and supports image insertion', async ({ p
 
 test('switches and deletes local boards without losing their contents', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.locator('#board-title').fill('我的独立画板');
   await page.locator('#board-title').press('Enter');
   await chooseTool(page, '椭圆');
@@ -186,7 +186,7 @@ test('switches and deletes local boards without losing their contents', async ({
 
 test('keeps unfilled strokes legible when switching to a dark canvas', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '线条');
   await page.mouse.move(500, 350); await page.mouse.down(); await page.mouse.move(700, 350); await page.mouse.up();
   await page.getByRole('button', { name: '切换主题', exact: true }).click();
@@ -198,7 +198,7 @@ test('keeps unfilled strokes legible when switching to a dark canvas', async ({ 
 
 test('resizes, styles, locks and erases an element with real pointer gestures', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 420); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(600, 300);
@@ -245,7 +245,7 @@ test('a corrupt import leaves the open document intact and canceled gestures are
 
 test('changing text size keeps its editable and selectable bounds in proportion', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '文字');
   await page.mouse.click(500, 350); await page.locator('#text-editor').fill('Hello 留白');
   await page.keyboard.press('Control+Enter');

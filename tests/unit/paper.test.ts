@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { createDocument, createElement } from '../../src/core/model';
 import { containsBounds, elementBounds, intersects } from '../../src/core/geometry';
-import { createPaper, paperAssignments, paperLayoutChanges, paperPositions, parsePageRange } from '../../src/core/paper';
+import { appendPaperChanges, createPaper, documentPaperLayout, paperAssignments, paperLayoutChanges, paperPositions, parsePageRange } from '../../src/core/paper';
 import { decodeDocument, encodeDocument } from '../../src/core/codec';
 import { Scene } from '../../src/core/scene';
 
 describe('fixed paper export boundaries', () => {
+  it('retains double-column intent with one sheet and appends without overlapping margins', () => {
+    const doc = createDocument(); doc.paperLayout = 'double';
+    doc.elements = paperPositions([createPaper()], 'double', { x: 300, y: 120 });
+    expect(documentPaperLayout(doc)).toBe('double');
+    const added = appendPaperChanges(doc.elements, [createPaper()], 'double')[0].after!;
+    expect(added.y).toBe(doc.elements[0].y); expect(intersects(elementBounds(added), elementBounds(doc.elements[0]))).toBe(false);
+    doc.elements.push(added); doc.paperLayout = 'single'; expect(documentPaperLayout(doc)).toBe('double');
+    const content = createElement('rect', { x: 500, y: 300, w: 200, h: 100 });
+    const first = appendPaperChanges([content], [createPaper()], 'single')[0].after!;
+    expect(elementBounds(first).y).toBeGreaterThan(elementBounds(content).y + elementBounds(content).h);
+  });
   it('validates, deduplicates and bounds page ranges before loading or exporting pages', () => {
     expect(parsePageRange('3,1-2,2', 4)).toEqual([1, 2, 3]);
     expect(parsePageRange('', 3)).toEqual([1, 2, 3]);

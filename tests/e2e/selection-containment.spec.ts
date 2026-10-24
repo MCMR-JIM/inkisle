@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 import { elementBounds } from '../../src/core/geometry';
 import type { BoardElement } from '../../src/core/model';
 
 async function blank(page: Page): Promise<void> {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   await expect(page.locator('#element-count')).toHaveText('0 个元素');
 }
 

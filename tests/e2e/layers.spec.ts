@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool, contextAction, openContextMenu } from './helpers';
+import { createBoard, chooseTool, contextAction, openContextMenu } from './helpers';
 import type { BoardElement } from '../../src/core/model';
 import type { RenderState } from '../../src/engine/renderer';
 
@@ -12,7 +12,7 @@ async function read(page: Page): Promise<BoardElement[]> {
 }
 
 async function stack(page: Page): Promise<BoardElement[]> {
-  await page.goto('/'); await page.locator('#quick-new').click(); await page.locator('#fill-toggle').click();
+  await page.goto('/'); await createBoard(page); await page.locator('#fill-toggle').click();
   await page.locator('[data-property="fill"][data-color="#f8e3dc"]').click(); await chooseTool(page, '矩形');
   await page.mouse.move(480, 300); await page.mouse.down(); await page.mouse.move(780, 520); await page.mouse.up();
   await page.locator('[data-property="fill"][data-color="#deedf5"]').click();
@@ -142,7 +142,7 @@ test('object commands remain in the context menu across viewport sizes and theme
 });
 
 test('each step crosses only one object and multi-selection keeps its internal order', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '矩形');
   for (const x of [450, 680, 910]) {
     await page.mouse.move(x, 300); await page.mouse.down(); await page.mouse.move(x + 160, 440); await page.mouse.up();

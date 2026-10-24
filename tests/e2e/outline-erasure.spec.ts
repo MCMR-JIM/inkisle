@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 test('erasing a single outline edge makes an open path and a second gap creates independently editable fragments', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(800, 500); await page.mouse.up();
   await chooseTool(page, '橡皮擦');
@@ -29,7 +29,7 @@ test('erasing a single outline edge makes an open path and a second gap creates 
 });
 
 test('a recognized rotated unfilled rectangle is cut at the erased world border without moving residual edges', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '轨迹识别');
   const angle = .45, center = { x: 700, y: 440 };
   const world = (x: number, y: number) => ({ x: center.x + x * Math.cos(angle) - y * Math.sin(angle), y: center.y + x * Math.sin(angle) + y * Math.cos(angle) });
@@ -89,7 +89,7 @@ test('quick consecutive outline erasures finish splitting even when the first wo
       }
     };
   });
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(800, 500); await page.mouse.up();
   await chooseTool(page, '橡皮擦');

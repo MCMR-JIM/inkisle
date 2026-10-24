@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { BoardMeta } from '../../src/core/model';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function boards(page: Page): Promise<BoardMeta[]> {
   return page.evaluate(async () => {
@@ -20,7 +20,7 @@ test('unnamed blank boards stay transient through new, zoom, library and close',
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const initial = await boards(page);
   for (let i = 0; i < 3; i++) {
-    await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+    await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
     await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
     await expect(page.locator('#toast')).toBeHidden();
   }
@@ -40,7 +40,7 @@ test('unnamed blank boards stay transient through new, zoom, library and close',
 test('importing an unnamed blank source and deleting the final stored board do not create library entries', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const initial = await boards(page);
-  await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await createBoard(page); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
   await page.locator('#import-file').setInputFiles((await download.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft'); expect(await boards(page)).toEqual(initial);
@@ -55,7 +55,7 @@ test('importing an unnamed blank source and deleting the final stored board do n
 test('naming a blank board saves it and restoring its default title removes only that empty board', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const initial = await boards(page);
-  await page.locator('#quick-new').click();
+  await createBoard(page);
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   await page.locator('#board-title').fill('Next idea'); await page.locator('#board-title').press('Enter');
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
@@ -70,7 +70,7 @@ test('naming a blank board saves it and restoring its default title removes only
 test('first content saves a draft, undo to empty discards it and redo restores it durably', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const initial = await boards(page);
-  await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft'); await chooseTool(page, '矩形');
+  await createBoard(page); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft'); await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 400); await page.mouse.up();
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const id = await page.evaluate(() => localStorage.getItem('liubai:last-board'));
@@ -87,7 +87,7 @@ test('clearing the name of another empty board in the library discards only that
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   const initial = await boards(page);
   for (const name of ['Later', 'Current']) {
-    await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+    await createBoard(page); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
     await page.locator('#board-title').fill(name); await page.locator('#board-title').press('Enter');
     await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   }

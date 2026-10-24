@@ -1,7 +1,8 @@
+import { createBoard } from './helpers';
 import { expect, test } from '@playwright/test';
 
 test('choosing a shape or line family leaves the pen and restores the last child tool', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   for (const [family, child] of [['shapes', 'rect'], ['lines', 'line']]) {
     await page.keyboard.press('p'); await expect(page.locator('[data-family="pen"]')).toHaveAttribute('aria-pressed', 'true');
     await page.locator(`[data-family="${family}"]`).click();
@@ -24,7 +25,7 @@ test('choosing a shape or line family leaves the pen and restores the last child
 
 test('opens the shapes family and chooses a hexagon', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.getByRole('button', { name: '图形', exact: true }).click();
   await expect(page.getByRole('menu', { name: '图形工具' })).toBeVisible();
   await page.getByRole('button', { name: '六边形', exact: true }).click();
@@ -39,7 +40,7 @@ test('opens the shapes family and chooses a hexagon', async ({ page }) => {
 
 test('keeps line options available after choosing and closes explicitly with the category button or Escape', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.locator('[data-family="lines"]').click();
   await expect(page.getByRole('menu', { name: '直线工具' })).toBeVisible();
   await page.getByRole('button', { name: '双向箭头', exact: true }).click();

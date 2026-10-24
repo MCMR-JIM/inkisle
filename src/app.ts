@@ -32,6 +32,8 @@ import { DEFAULT_ERASER_SIZE, normalizeEraserSize } from './core/eraser';
 import { PdfControls } from './ui/pdf-controls';
 import { exportSource, importSource } from './storage/source-file';
 import { paperDiagnostics } from './engine/paper-render';
+import { BoardCreation } from './ui/board-creation';
+import { paperPages } from './core/paper';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
@@ -39,6 +41,7 @@ const penStyle = (styles: Partial<BoardElement>): Partial<BoardElement> => ({ st
 
 export class App {
   private pdf: PdfControls;
+  private boardCreation: BoardCreation;
   private codec = new SnapshotCodec();
   private repo = new Repository(PRODUCT.database, this.codec);
   private doc: BoardDocument = createDocument();
@@ -110,23 +113,28 @@ export class App {
       document: () => this.document(), apply: (changes, label) => this.scene.apply(changes, label),
       settle: async () => { this.interaction.finishEditing(); await this.interaction.settle(); },
       notify: message => this.toast(message), invalidate: () => this.renderer.invalidate(),
-      newBoard: async name => {
-        const previous = this.doc.id; await this.newBoard();
-        if (this.doc.id === previous) throw new Error('请先保存当前画板，再导入 PDF');
-        this.doc.title = name || 'PDF 笔记'; $<HTMLInputElement>('#board-title').value = this.doc.title;
-        this.writer?.enqueue([], { title: this.doc.title });
+      setLayout: paperLayout => {
+        if (this.doc.paperLayout === paperLayout) return;
+        this.doc.paperLayout = paperLayout; this.writer?.enqueue([], { paperLayout });
       },
       view: bounds => {
         const left = $('#properties').hidden ? 24 : $('#properties').getBoundingClientRect().right + 24;
         const toolbar = $('.toolbar').getBoundingClientRect();
-        const top = document.documentElement.dataset.toolbarPosition === 'top' ? Math.max(90, toolbar.bottom + 20) : 90;
+        const toolbarAtTop = document.documentElement.dataset.toolbarPosition === 'top';
+        const top = Math.max($('.app-header').getBoundingClientRect().bottom + 20, toolbarAtTop ? toolbar.bottom + 20 : 90);
         const navigation = $('#pdf-navigation');
-        const bottom = navigation.hidden ? 140 : this.renderer.height - navigation.getBoundingClientRect().top + 20;
+        const bottomEdge = Math.min(navigation.hidden ? this.renderer.height : navigation.getBoundingClientRect().top, toolbarAtTop ? this.renderer.height : toolbar.top);
+        const bottom = Math.max(70, this.renderer.height - bottomEdge + 20);
         const width = Math.max(80, this.renderer.width - left - 24), height = Math.max(80, this.renderer.height - top - bottom);
         const zoom = Math.min(1.5, Math.max(MIN_ZOOM, Math.min(width / bounds.w, height / bounds.h)));
         this.renderer.state.camera = { x: left + width / 2 - (bounds.x + bounds.w / 2) * zoom, y: top + height / 2 - (bounds.y + bounds.h / 2) * zoom, zoom };
         this.renderer.invalidate(); this.cameraChanged();
       },
+    });
+    this.boardCreation = new BoardCreation(async doc => {
+      const created = await this.createBoard(doc);
+      if (created && paperPages(doc.elements).length) this.pdf.focusPage();
+      return created;
     });
     this.setEraserSize(state.eraserSize);
     this.colorPickers = {
@@ -238,17 +246,22 @@ export class App {
 
   private async newBoard(example = false): Promise<void> {
     if (this.switching) return;
+    if (!example) { this.closeDialogs(); this.closeMenus(); this.boardCreation.open(); return; }
+    const doc = createDemo(); this.initialCamera(doc); await this.createBoard(doc);
+  }
+
+  private async createBoard(doc: BoardDocument): Promise<boolean> {
+    if (this.switching) return false;
     this.switching = true;
     this.interaction.finishEditing();
     try {
       await this.libraryMutation;
       await this.interaction.settle();
-      if (this.writer && !await this.writer.flush()) { this.toast('请先重试保存，或导出当前画板备份'); return; }
-      const doc = example ? createDemo() : createDocument();
-      if (example) this.initialCamera(doc);
-      if (example) await this.repo.create(doc, thumbnail(doc.elements));
-      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc, true, example);
-    } catch (error) { this.toast(`新建失败：${message(error)}`); }
+      if (this.writer && !await this.writer.flush()) { this.toast('请先重试保存，或导出当前画板备份'); return false; }
+      const stored = !isEmptyUntitled(doc);
+      if (stored) await this.repo.create(doc, thumbnail(doc.elements));
+      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc, true, stored); return true;
+    } catch (error) { this.toast(`新建失败：${message(error)}`); return false; }
     finally { this.switching = false; }
   }
 
@@ -285,6 +298,7 @@ export class App {
     if (!target.closest('.menu, .tool-submenu, [data-family], #document-menu-button, #export-button')) { this.closeMenus(); }
     });
     document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => {
+      if (dialog.dataset.busy === 'true') return;
       if (event.target === dialog) { const b = dialog.getBoundingClientRect(); if (event.clientX < b.left || event.clientX > b.right || event.clientY < b.top || event.clientY > b.bottom) dialog.close(); }
     }));
     const on = (id: string, action: () => void) => $(`#${id}`).addEventListener('click', action);

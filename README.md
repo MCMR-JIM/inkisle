@@ -25,7 +25,7 @@ Built with TypeScript and Canvas 2D, with no account or backend required. Boards
 - **本地画板库**：创建、命名、搜索、排序和复制多个画板，自动保存内容、视角与个人设置；未命名的空画板不占用画板库。
 - **图片导出**：PNG / SVG 可选整板或选区、透明或画板背景及留白，PNG 支持 1–4 倍分辨率。
 - **PDF and paper**: Import selected pages, annotate paper and its margins, switch between one-column and two-column layouts, and export within fixed page boundaries.
-- **明暗主题**：响应式布局，支持小屏使用和自定义快捷键。
+- **Desktop tools**: Light/dark themes and configurable keyboard shortcuts.
 
 ## 快速开始
 
@@ -113,7 +113,7 @@ PNG 和 SVG 的导出设置可选择整张画板或选区、背景与 0–500 �
 | 导出源文件 | `Ctrl + S` |
 | 快捷键设置 / 网格 | `?` / `G` |
 
-macOS 使用 `Command` 对应 `Ctrl`。点击左下角键盘按钮可修改键位，设置保存在本机。
+On macOS, use `Command` instead of `Ctrl`. The keyboard button in the top bar opens shortcut settings, which are saved on the device.
 
 ## Windows 桌面构建
 

@@ -1,3 +1,4 @@
+import { createBoard } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 type ImageDecodeWindow = Window & { imageDecodeGate: { started: boolean; release: () => void } };
@@ -5,7 +6,7 @@ type ImageDecodeWindow = Window & { imageDecodeGate: { started: boolean; release
 async function blank(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  await page.locator('#quick-new').click();
+  await createBoard(page);
   await expect(page.locator('#element-count')).toHaveText('0 个元素');
 }
 
@@ -37,7 +38,7 @@ for (const reopen of [false, true]) {
     await page.locator('#board-title').fill('Image source');
     await page.locator('#board-title').blur();
     await beginImageImport(page);
-    await page.locator('#quick-new').click();
+    await createBoard(page);
     await expect(page.locator('#board-title')).toHaveValue('未命名画板');
     if (reopen) {
       await page.locator('#library-button').click();

@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 for (const pressure of [false, true]) test(`handwriting keeps its live curve after release and reopening (pressure ${pressure})`, async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '画笔');
   const toggle = page.getByRole('switch', { name: '压感', exact: true });
   if ((await toggle.isChecked()) !== pressure) await toggle.click();
@@ -54,7 +54,7 @@ for (const pressure of [false, true]) test(`handwriting keeps its live curve aft
 
 test('coalesced batches and zoom preserve the same screen-space handwriting', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '画笔');
   const strokes = [];
   for (const batch of [false, true]) {

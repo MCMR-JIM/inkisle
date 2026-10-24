@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function blank(page: Page): Promise<void> {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   await page.locator('#board-title').fill('Focus checks'); await page.locator('#board-title').blur();
 }

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
 }
 
 async function eraseVertical(page: Page, x = 650): Promise<void> {

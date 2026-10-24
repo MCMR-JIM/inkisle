@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool, contextAction, openContextMenu } from './helpers';
+import { createBoard, chooseTool, contextAction, openContextMenu } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
 }
 
 async function filledRect(page: Page): Promise<void> {

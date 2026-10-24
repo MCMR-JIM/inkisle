@@ -1,32 +1,16 @@
+import { createBoard, readBoard as document } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
-import { PDFDocument, PDFName, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { mkdir } from 'node:fs/promises';
-import type { BoardDocument } from '../../src/core/model';
-
-async function fixture(count = 3): Promise<Buffer> {
-  const doc = await PDFDocument.create(), font = await doc.embedFont(StandardFonts.Helvetica);
-  for (let i = 0; i < count; i++) {
-    const page = doc.addPage([420, 595]); page.drawText(`Source page ${i + 1}`, { x: 40, y: 530, size: 24, font });
-    page.drawRectangle({ x: 40, y: 250, width: 200, height: 150, color: rgb(.15, .7, .3) });
-  }
-  return Buffer.from(await doc.save());
-}
+import { pdfFixture as fixture } from '../fixtures/pdf';
 async function setup(page: Page, count = 3) {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   await page.locator('#import-file').setInputFiles({ name: 'fixture.pdf', mimeType: 'application/pdf', buffer: await fixture(count) });
   await expect(page.locator('#pdf-import-dialog')).toBeVisible({ timeout: 30000 });
   await page.locator('#pdf-confirm-import').click();
   await expect(page.locator('#pdf-navigation')).toBeVisible();
   await expect(page.locator('#save-status[data-state="saved"]')).toBeVisible();
 }
-async function document(page: Page): Promise<BoardDocument> {
-  await expect(page.locator('#save-status[data-state="saved"]')).toBeVisible();
-  return page.evaluate(async () => {
-    const path = '/src/storage/repository.ts'; const { Repository } = await import(/* @vite-ignore */ path);
-    const repo = new Repository(); const doc = await repo.load(localStorage.getItem('liubai:last-board')); repo.close(); return doc!;
-  });
-}
-
 async function expectPreview(page: Page): Promise<void> {
   await expect.poll(() => page.locator('#canvas').evaluate((canvas: HTMLCanvasElement) => {
     const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -44,9 +28,9 @@ test('paints PDF content without another gesture after import, navigation, and r
 });
 
 test('adds blank paper and undoes deleting a sheet together with its margin annotations', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click();
-  await page.locator('#document-menu-button').click(); await page.locator('[data-action="add-paper"]').click();
-  await page.locator('#pdf-add-paper').click(); await expect(page.locator('#pdf-page-total')).toHaveText('/ 2');
+  await page.goto('/'); await createBoard(page);
+  await page.locator('#add-paper-button').click();
+  await page.locator('#add-paper-button').click(); await expect(page.locator('#pdf-page-total')).toHaveText('/ 2');
   await page.locator('#pdf-jump').fill('1'); await page.locator('#pdf-jump').dispatchEvent('change');
   const doc = await document(page), sheet = doc.elements[0], camera = doc.camera;
   await page.getByRole('button', { name: '文字', exact: true }).click(); await page.mouse.click((sheet.x - 70) * camera.zoom + camera.x, (sheet.y + 120) * camera.zoom + camera.y);
@@ -76,7 +60,7 @@ test('imports hundreds of page references without rasterizing the whole book, an
     const path = '/src/storage/assets.ts'; const { pdfAssets } = await import(/* @vite-ignore */ path); pdfAssets.close();
     await new Promise<void>((resolve, reject) => { const req = indexedDB.deleteDatabase('liubai-pdf-assets-v1'); req.onsuccess = () => resolve(); req.onerror = () => reject(req.error); });
   });
-  await page.locator('#quick-new').click(); await page.locator('#import-file').setInputFiles((await source.path())!);
+  await createBoard(page); await page.locator('#import-file').setInputFiles((await source.path())!);
   await expect(page.locator('#toast')).toContainText('画板已导入');
   expect((await document(page)).elements).toEqual(doc.elements);
   await expectPreview(page);
@@ -138,7 +122,7 @@ test('preserves existing PDF annotation appearances in the exported document', a
   const appearance = source.context.flateStream('1 0 0 rg 0 0 120 80 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 120, 80], Resources: {} });
   const annotation = source.context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [40, 40, 160, 120], AP: { N: source.context.register(appearance) }, F: 4 });
   source.getPage(0).node.set(PDFName.of('Annots'), source.context.obj([source.context.register(annotation)]));
-  await page.goto('/'); await page.locator('#import-file').setInputFiles({ name: 'annotated.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await source.save()) });
+  await page.goto('/'); await createBoard(page); await page.locator('#import-file').setInputFiles({ name: 'annotated.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await source.save()) });
   await expect(page.locator('#pdf-import-dialog')).toBeVisible(); await page.locator('#pdf-confirm-import').click();
   await expectPreview(page);
   await page.locator('#export-button').click(); await page.locator('[data-action="export-pdf"]').click();

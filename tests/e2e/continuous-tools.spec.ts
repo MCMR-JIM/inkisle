@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function blank(page: Page) {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
 }
 
 test('shape, line and recognition tools stay active across consecutive gestures without selecting the result', async ({ page }) => {
