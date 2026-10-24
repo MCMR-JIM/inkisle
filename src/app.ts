@@ -1,4 +1,4 @@
-import { COLORS, FILLS, createDocument, createElement, type BoardDocument, type BoardElement, type BoardMeta, type Tool } from './core/model';
+import { COLORS, FILLS, createDocument, createElement, isEmptyUntitled, type BoardDocument, type BoardElement, type BoardMeta, type Tool } from './core/model';
 import { validateDocument } from './core/codec';
 import { Scene } from './core/scene';
 import { hitTest, screenToWorld, unionBounds, zoomAt } from './core/geometry';
@@ -144,7 +144,7 @@ export class App {
     doc.camera = { x: (width - 1440 * scale) / 2, y: (height - 960 * scale) / 2 + 10, zoom: scale };
   }
 
-  private loadDocument(doc: BoardDocument, persistent = true): void {
+  private loadDocument(doc: BoardDocument, persistent = true, stored = true): void {
     this.interaction.cancel(); this.interaction.finishEditing();
     this.writer?.stop(); this.unsubscribe();
     this.doc = doc;
@@ -155,8 +155,10 @@ export class App {
     this.renderer.state.groupScope = [];
     this.writer = persistent ? new Writer(this.repo, () => this.document(), (state, error) => {
       this.saveState(state);
+      if (state === 'saved') writePreference('last-board', this.doc.id);
+      else if (state === 'draft' && readPreference('last-board') === this.doc.id) writePreference('last-board', '');
       if (error) this.toast(`保存暂未成功，点击左上角保存状态可重试。${message(error)}`, 5000);
-    }) : null;
+    }, stored) : null;
     this.unsubscribe = this.scene.subscribe(changes => {
       for (const id of this.renderer.state.selected) if (!this.scene.get(id)) this.renderer.state.selected.delete(id);
       this.writer?.enqueue(changes);
@@ -166,8 +168,11 @@ export class App {
     $('#board-title').setAttribute('value', doc.title);
     $<HTMLInputElement>('#board-title').value = doc.title;
     this.setTool('select');
-    writePreference('last-board', doc.id);
-    if (persistent) this.saveState('saved');
+    if (stored && persistent) writePreference('last-board', doc.id);
+    if (persistent) {
+      this.saveState(stored ? 'saved' : 'draft');
+      if (stored && isEmptyUntitled(doc)) this.writer?.enqueue([]);
+    }
     this.updateDocumentUI(); this.selectionChanged(); this.renderer.invalidate();
   }
 
@@ -198,9 +203,8 @@ export class App {
       if (this.writer && !await this.writer.flush()) { this.toast('请先重试保存，或导出当前画板备份'); return; }
       const doc = example ? createDemo() : createDocument();
       if (example) this.initialCamera(doc);
-      await this.repo.create(doc, thumbnail(doc.elements));
-      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc);
-      this.toast(example ? '这块画布，现在属于你了' : '一座新的墨屿，等你的好想法');
+      if (example) await this.repo.create(doc, thumbnail(doc.elements));
+      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc, true, example);
     } catch (error) { this.toast(`新建失败：${message(error)}`); }
     finally { this.switching = false; }
   }
@@ -472,7 +476,7 @@ export class App {
 
   private saveState(state: SaveState): void {
     const el = $('#save-status'); el.dataset.state = state;
-    el.lastElementChild!.textContent = state === 'saved' ? '已保存在本机' : state === 'saving' ? '正在保存…' : '保存未成功 · 点击重试';
+    el.lastElementChild!.textContent = state === 'draft' ? '空白画板' : state === 'saved' ? '已保存在本机' : state === 'saving' ? '正在保存…' : '保存未成功 · 点击重试';
   }
 
   private cameraChanged(persist = true): void {
@@ -697,8 +701,9 @@ export class App {
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) throw new Error('请先保存或导出当前画板');
       doc.id = crypto.randomUUID(); doc.created = doc.updated = Date.now();
-      await this.repo.create(doc, thumbnail(doc.elements));
-      this.closeDialogs(); this.loadDocument(doc); this.toast('画板已导入');
+      const stored = !isEmptyUntitled(doc);
+      if (stored) await this.repo.create(doc, thumbnail(doc.elements));
+      this.closeDialogs(); this.loadDocument(doc, true, stored); this.toast('画板已导入');
     } catch (error) { this.toast(`导入失败：${message(error)}`, 5000); }
   }
 
@@ -786,7 +791,7 @@ export class App {
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) { this.toast('当前画板尚未保存成功，请先重试'); return; }
       // A thumbnail is only rendered when opening the library, never during drawing.
-      if (this.writer) await this.repo.compact(this.document(), thumbnail(this.scene.elements));
+      if (this.writer?.stored) await this.repo.compact(this.document(), thumbnail(this.scene.elements));
       const boards = await this.repo.list();
       this.renderLibrary(boards);
     } catch (error) { this.toast(`无法读取画板：${message(error)}`); }
@@ -831,7 +836,8 @@ export class App {
         if (this.writer && !await this.writer.flush()) throw new Error('名称尚未保存，请重试');
       } else {
         const doc = await this.repo.load(id); if (!doc) throw new Error('画板已被删除');
-        await this.repo.append(id, [], { title });
+        if (isEmptyUntitled({ ...doc, title })) await this.repo.remove(id, true);
+        else await this.repo.append(id, [], { title });
       }
       this.renderLibrary(await this.repo.list());
     } catch (error) { this.toast(`重命名失败：${message(error)}`); }
@@ -879,7 +885,7 @@ export class App {
         const boards = await this.repo.list();
         const next = boards[0] ? await this.repo.load(boards[0].id) : null;
         if (next) this.loadDocument(next);
-        else { const doc = createDocument(); await this.repo.create(doc); this.loadDocument(doc); }
+        else this.loadDocument(createDocument(), true, false);
       }
       this.renderLibrary(await this.repo.list()); this.toast('画板已删除');
     } catch (error) { this.toast(message(error)); }

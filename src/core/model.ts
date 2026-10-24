@@ -84,6 +84,10 @@ export function createDocument(title = '未命名画板'): BoardDocument {
   };
 }
 
+export function isEmptyUntitled(doc: Pick<BoardDocument, 'title' | 'elements'>): boolean {
+  return doc.elements.length === 0 && (!doc.title.trim() || doc.title.trim() === '未命名画板');
+}
+
 /** A split inherits its parent's layer, with exact lexicographic child ranks. */
 export function compareElements(a: BoardElement, b: BoardElement): number {
   if (a.order !== b.order) return a.order - b.order;

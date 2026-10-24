@@ -4,7 +4,7 @@ import type { BoardElement } from '../../src/core/model';
 async function blank(page: Page) {
   await page.goto('/'); await page.locator('#quick-new').click();
   await expect(page.locator('#board-title')).toHaveValue('未命名画板');
-  await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   await page.keyboard.press('p');
 }
 

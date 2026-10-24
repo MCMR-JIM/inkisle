@@ -153,16 +153,28 @@ export class Repository {
     this.revisions.set(id, nextRevision);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, requireCurrentRevision = false): Promise<void> {
+    const expectedRevision = this.revisions.get(id);
     const db = await this.open();
     const tx = db.transaction(['boards', 'snapshots', 'logs'], 'readwrite');
     const complete = done(tx);
-    tx.objectStore('boards').delete(id);
+    const boards = tx.objectStore('boards');
+    let failure: Error | null = null;
+    if (requireCurrentRevision) {
+      // Automatic empty-board cleanup must not delete edits from another window.
+      const req = boards.get(id) as IDBRequest<StoredBoard | undefined>;
+      req.onsuccess = () => {
+        if (req.result && (req.result.revision ?? 0) !== expectedRevision) {
+          failure = new Error('画板已在另一个窗口更新，请先导出当前内容，再刷新页面'); tx.abort(); return;
+        }
+        boards.delete(id);
+      };
+    } else boards.delete(id);
     tx.objectStore('snapshots').delete(id);
     const logs = tx.objectStore('logs');
     const keys = logs.index('boardId').getAllKeys(id);
     keys.onsuccess = () => { for (const key of keys.result) logs.delete(key); };
-    await complete;
+    try { await complete; } catch (error) { throw failure ?? error; }
     this.revisions.delete(id);
   }
 

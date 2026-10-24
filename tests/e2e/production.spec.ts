@@ -3,9 +3,28 @@ import { chooseTool, contextAction } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
 
+test('production unnamed blank boards stay out of the library until named or edited', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+  await page.getByRole('button', { name: '关闭画板库', exact: true }).click();
+  for (let i = 0; i < 3; i++) {
+    await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+    await expect(page.locator('#toast')).toBeHidden();
+  }
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+  await page.getByRole('button', { name: '关闭画板库', exact: true }).click();
+  await page.locator('#board-title').fill('Empty plan'); await page.locator('#board-title').press('Enter');
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#board-title')).toHaveValue('Empty plan');
+  await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await page.locator('#board-title').fill(''); await page.locator('#board-title').press('Enter');
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+});
+
 test('production highlighter draws wide translucent ink and restores ordinary pen settings', async ({ page }) => {
   await page.goto('/'); await page.locator('#quick-new').click();
-  await expect(page.locator('#board-title')).toHaveValue('未命名画板'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await expect(page.locator('#board-title')).toHaveValue('未命名画板'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   await page.keyboard.press('p'); await page.getByRole('button', { name: '荧光笔', exact: true }).click();
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(750, 300, { steps: 8 }); await page.mouse.up();
   await page.getByRole('button', { name: '普通画笔', exact: true }).click();

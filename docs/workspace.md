@@ -33,6 +33,8 @@ Tool option bars share icon-above-label buttons, size to their contents and stay
 
 ## Board library
 
+Unnamed empty boards stay in memory and do not enter the library. Adding content or giving a board a name starts automatic saving; named empty boards are kept. Undoing or deleting all content from an unnamed board removes its stored copy, while redo can restore it. New boards open without a welcome notification.
+
 Search by board name, sort by recent edit or name, edit names directly on cards, and duplicate entire boards. A board copy has independent elements and groups. Renaming and copying finish before switching or deleting a board.
 
 ## Image export

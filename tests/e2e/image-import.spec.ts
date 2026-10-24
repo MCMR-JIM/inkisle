@@ -47,9 +47,10 @@ for (const reopen of [false, true]) {
     await releaseImage(page);
     await expect(page.locator('#toast')).toContainText('画板已切换，请重新插入图片');
     await expect(page.locator('#element-count')).toHaveText('0 个元素');
-    await expect(page.locator('#save-status')).toContainText('已保存在本机');
+    await expect(page.locator('#save-status')).toHaveAttribute('data-state', reopen ? 'saved' : 'draft');
     await page.reload();
     await expect(page.locator('#element-count')).toHaveText('0 个元素');
+    await expect(page.locator('#board-title')).toHaveValue('Image source');
   });
 }
 

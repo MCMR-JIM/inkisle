@@ -175,7 +175,9 @@ test('four-sided diagonal gestures do not add expensive contour fitting after th
 test('shape recognition works offline after the application is opened', async ({ page, context }) => {
   await blank(page); await chooseTool(page, '轨迹识别');
   // Preload the test's inspection helper before taking the network away.
-  await read(page);
+  await page.evaluate(async () => {
+    const path = '/src/storage/repository.ts'; await import(/* @vite-ignore */ path);
+  });
   await context.setOffline(true);
   await trace(page, outline([{ x: 600, y: 280 }, { x: 710, y: 465 }, { x: 490, y: 470 }]));
   const [el] = await read(page);
