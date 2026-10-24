@@ -29,9 +29,11 @@ The pen popover includes **Pen / Highlighter**. Highlighter defaults to yellow, 
 
 Tool option bars share icon-above-label buttons, size to their contents and stay horizontally centered. They wrap only when the viewport requires it. Pen pressure stays at the right, separated from pen choices by a short vertical rule.
 
+Selecting **Eraser** or pressing **E** opens a size slider with a live value. Its diameter ranges from 4 to 120 screen pixels (default 20) and is remembered locally. Over the canvas, wheel up enlarges it and wheel down shrinks it; Ctrl/Command-wheel still zooms and holding Space keeps panning. Cursor and erasure share the same diameter at every zoom. Changing size during a stroke preserves each segment's width and the whole stroke remains one undo step.
+
 ## Shared UI controls
 
-`src/ui/floating-bar.ts` renders option bars from options, separators and switches. Pen, shape, line, selection and alignment bars reuse this frame and its button styles; the fill switch and main/zoom toolbar separators reuse the same primitives. Tool-specific classes only provide anchoring. Add choices through option data rather than another toolbar template or stylesheet. The common layout observer keeps notifications clear of any visible tool bar, including wrapped options.
+`src/ui/floating-bar.ts` renders option bars from options, separators, switches and range sliders. Pen, eraser, shape, line, selection and alignment bars reuse this frame and its control styles; the fill switch and main/zoom toolbar separators reuse the same primitives. Range items provide bounds, step, label, unit and a live output; `setRangeValue` keeps programmatic changes and accessible values synchronized. Tool-specific classes only provide anchoring. Add choices through option data rather than another toolbar template or stylesheet. The common layout observer keeps notifications clear of any visible tool bar, including wrapped options.
 
 `src/ui/custom-select.ts` supplies every select: text size, zoom, toolbar placement, library sorting and image-export settings. It supports typed string/number values, disabled options, keyboard navigation and typeahead, an optional chevron, centered options and a separate anchor. Menus match their anchor width and trigger font size, with no outer padding. The library sort trigger is 108 pixels wide to match its menu. Modal menus stay inside their dialog layer. Zoom formats arbitrary current values without appending them to its preset list. Reuse this component instead of native selects or a new menu implementation.
 

@@ -8,7 +8,10 @@ interface Option {
 interface Switch {
   type: 'switch'; id: string; label: string; labelId?: string; checked: boolean; tooltip?: string;
 }
-export type FloatingBarItem = Option | Switch | { type: 'separator' } | { type: 'group'; items: FloatingBarItem[] };
+interface Range {
+  type: 'range'; id: string; label: string; min: number; max: number; value: number; step?: number; unit?: string;
+}
+export type FloatingBarItem = Option | Switch | Range | { type: 'separator' } | { type: 'group'; items: FloatingBarItem[] };
 export interface FloatingBarConfig {
   id: string; label: string; items: FloatingBarItem[]; className?: string;
   role?: 'menu' | 'toolbar' | 'group'; layout?: 'compact' | 'grid';
@@ -29,6 +32,10 @@ function itemMarkup(item: FloatingBarItem): string {
     const labelId = item.labelId ?? `${item.id}-label`;
     return `<div class="floating-bar-control"><label id="${escape(labelId)}" for="${escape(item.id)}">${escape(item.label)}</label>${toggleSwitchMarkup(item.id, labelId, item.checked, item.tooltip ?? item.label)}</div>`;
   }
+  if (item.type === 'range') {
+    const value = `${item.value}${item.unit ? ` ${item.unit}` : ''}`;
+    return `<div class="floating-bar-range"><div class="floating-bar-range-heading"><label for="${escape(item.id)}">${escape(item.label)}</label><output id="${escape(item.id)}-value" for="${escape(item.id)}">${escape(value)}</output></div><input type="range" id="${escape(item.id)}" min="${item.min}" max="${item.max}" step="${item.step ?? 1}" value="${item.value}" data-range-input data-unit="${escape(item.unit ?? '')}" aria-valuetext="${escape(value)}" /></div>`;
+  }
   return `<button type="button" class="floating-bar-option" aria-label="${escape(item.ariaLabel ?? item.label)}" data-tooltip="${escape(item.tooltip ?? item.label + (item.shortcut ? `  ${item.shortcut}` : ''))}" ${attributes(item.attributes)}>${item.icon ? icon(item.icon, 19) : ''}<span>${escape(item.label)}</span>${item.endIcon ? icon(item.endIcon, 14) : ''}${item.shortcut ? `<kbd>${escape(item.shortcut)}</kbd>` : ''}</button>`;
 }
 
@@ -39,7 +46,19 @@ export function floatingBarMarkup(bar: FloatingBarConfig): string {
 
 export function barSeparatorMarkup(): string { return '<span class="bar-separator" aria-hidden="true"></span>'; }
 
+/** Programmatic changes (for example wheel input) share the slider's readout. */
+export function setRangeValue(input: HTMLInputElement, value: number): void {
+  input.value = String(value);
+  const text = `${input.value}${input.dataset.unit ? ` ${input.dataset.unit}` : ''}`;
+  input.setAttribute('aria-valuetext', text);
+  const output = input.closest('.floating-bar-range')?.querySelector('output');
+  if (output) output.value = text;
+}
+
 export function bindFloatingBars(root: HTMLElement, anchor?: HTMLElement): void {
+  root.addEventListener('input', event => {
+    if (event.target instanceof HTMLInputElement && event.target.matches('[data-range-input]')) setRangeValue(event.target, event.target.valueAsNumber);
+  });
   root.addEventListener('keydown', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('.floating-bar-option');
     const bar = button?.closest<HTMLElement>('[data-floating-bar]');

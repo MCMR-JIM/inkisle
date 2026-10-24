@@ -12,7 +12,7 @@ import { Interaction, isTextInput } from './engine/interaction';
 import { downloadBlob, exportDimensions, exportPNG, exportSVG, fileName, thumbnail, type ExportOptions } from './engine/export';
 import { buildShell, swatches } from './ui/shell';
 import { TOOL_FAMILIES, ToolFamilyController, familyForTool, hasFamilyOptions } from './ui/tool-families';
-import { bindFloatingBars } from './ui/floating-bar';
+import { bindFloatingBars, setRangeValue } from './ui/floating-bar';
 import { icon } from './ui/icons';
 import { CustomSelect } from './ui/custom-select';
 import { createDemo } from './demo';
@@ -28,6 +28,7 @@ import { selectedFill, setFillColor, setFillEnabled } from './core/fill';
 import { PRODUCT, isBoardFile, isElementClipboard, readPreference, writePreference } from './core/product';
 import { SelectionToolbar } from './ui/selection-toolbar';
 import { alignmentChanges, cloneGroupPaths, groupChanges, inScope, selectedUnits, ungroupChanges, type Alignment } from './core/groups';
+import { DEFAULT_ERASER_SIZE, normalizeEraserSize } from './core/eraser';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
@@ -91,7 +92,7 @@ export class App {
     this.exportFormat = new CustomSelect<'png' | 'svg'>($('#export-format'), [{ value: 'png', label: 'PNG 图片' }, { value: 'svg', label: 'SVG 矢量图' }], 'png', () => this.updateExportPreview());
     this.exportBackground = new CustomSelect<'board' | 'transparent'>($('#export-background'), [{ value: 'board', label: '画板背景' }, { value: 'transparent', label: '透明背景' }], 'board', () => this.updateExportPreview());
     this.exportScale = new CustomSelect($('#export-scale'), [1, 2, 3, 4].map(value => ({ value, label: `${value}×` })), 2, () => this.updateExportPreview());
-    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map() };
+    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map(), eraserSize: normalizeEraserSize(Number(readPreference('eraser-size') ?? DEFAULT_ERASER_SIZE)) };
     document.documentElement.dataset.theme = state.dark ? 'dark' : 'light';
     this.renderer = new Renderer(this.scene, $('#canvas'), $('#interaction-canvas'), state);
     this.selectionToolbar = new SelectionToolbar(this.renderer);
@@ -101,6 +102,7 @@ export class App {
       this.firstSceneFrameMs = performance.now() - this.startup;
     };
     this.interaction = this.createInteraction();
+    this.setEraserSize(state.eraserSize);
     this.colorPickers = {
       stroke: new ColorPicker($('#stroke-palette'), this.palettes.stroke, 'stroke', stroke => this.changeStyle({ stroke }), { preview: (index, color) => this.updatePalette('stroke', index, color, false), change: (index, color) => this.updatePalette('stroke', index, color), reset: () => this.updatePalette('stroke') }),
       fill: new ColorPicker($('#fill-palette'), this.palettes.fill, 'fill', fill => this.changeFillColor(fill), { preview: (index, color) => this.updatePalette('fill', index, color, false), change: (index, color) => this.updatePalette('fill', index, color), reset: () => this.updatePalette('fill') }),
@@ -118,6 +120,7 @@ export class App {
     return new Interaction({
       renderer: this.renderer, styles: this.styles,
       onSelection: () => this.selectionChanged(), onCamera: () => this.cameraChanged(),
+      onEraserSize: size => this.setEraserSize(size),
       setTool: tool => this.setTool(tool), onContext: event => this.contextMenu(event),
     });
   }
@@ -302,6 +305,7 @@ export class App {
     $('#board-title').addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter') $('#board-title').blur(); });
     $('#opacity').addEventListener('input', () => { $('#opacity-value').textContent = `${$<HTMLInputElement>('#opacity').value}%`; });
     $('#opacity').addEventListener('change', () => this.changeStyle({ opacity: +$<HTMLInputElement>('#opacity').value / 100 }));
+    $('#eraser-size').addEventListener('input', () => this.setEraserSize($<HTMLInputElement>('#eraser-size').valueAsNumber));
     $<HTMLInputElement>('#import-file').addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) void this.importFile(input.files[0]); input.value = ''; });
     $<HTMLInputElement>('#image-file').addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) void this.addImage(input.files[0]); input.value = ''; });
     $('#workspace').addEventListener('dragover', event => { event.preventDefault(); });
@@ -339,6 +343,12 @@ export class App {
     } else if (!highlighter && this.ordinaryPenStyle) {
       this.highlighterStyle = penStyle(this.styles); Object.assign(this.styles, this.ordinaryPenStyle); this.ordinaryPenStyle = null;
     }
+  }
+
+  private setEraserSize(value: number): void {
+    const size = this.interaction.setEraserSize(value);
+    setRangeValue($('#eraser-size'), size);
+    writePreference('eraser-size', String(size));
   }
 
   private toggleToolFamily(id: string): void {

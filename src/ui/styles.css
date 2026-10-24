@@ -65,6 +65,9 @@ kbd { font-family: inherit; font-size: 10px; font-weight: 400; white-space: nowr
 .bar-separator { flex: 0 0 1px; height: 22px; margin: 0 5px; background: var(--border); }
 .floating-bar-group { display: flex; align-items: center; gap: 3px; }
 .floating-bar-control { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+.floating-bar-range { display: flex; flex-direction: column; justify-content: center; gap: 9px; width: 200px; max-width: calc(100vw - 52px); min-height: 44px; padding: 4px 8px; }
+.floating-bar-range-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px; white-space: nowrap; }
+.floating-bar-range output { color: var(--label); font-variant-numeric: tabular-nums; }
 .floating-bar--compact .floating-bar-option, .floating-bar--grid .floating-bar-option { flex-direction: row; gap: 5px; padding: 6px 11px; font-size: 12px; }
 .floating-bar--grid { display: grid; grid-template-columns: repeat(2, max-content); }
 .tool-submenu { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 18; }

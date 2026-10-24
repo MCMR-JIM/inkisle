@@ -46,6 +46,7 @@ test('shared bars adapt to arbitrary option counts and keep trailing controls to
       fixture.innerHTML = floatingBarMarkup({ id: 'example-bar', label: 'Example controls', items: [
         ...Array.from({ length: count }, (_, i) => ({ type: 'option', icon: 'pen', label: `工具 ${i + 1}` })),
         { type: 'group', items: [{ type: 'separator' }, { type: 'switch', id: 'example-switch', label: '压感', checked: true }] },
+        { type: 'range', id: 'example-range', label: '大小', min: 4, max: 120, step: 2, value: 20, unit: 'px' },
       ] });
       document.querySelector('#app')!.append(fixture); fixture.querySelector<HTMLElement>('#example-bar')!.hidden = false;
     }, count);
@@ -57,5 +58,6 @@ test('shared bars adapt to arbitrary option counts and keep trailing controls to
     expect(separator.x + separator.width).toBeLessThan(control.x);
     expect(separator.y + separator.height / 2).toBeCloseTo(control.y + control.height / 2, 1);
     expect(control.x + control.width).toBeLessThanOrEqual(frame.x + frame.width);
+    await page.locator('#example-range').fill('82'); await expect(page.locator('#example-range-value')).toHaveText('82 px');
   }
 });

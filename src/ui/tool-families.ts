@@ -1,6 +1,7 @@
 import type { Tool } from '../core/model';
 import { icon } from './icons';
 import { floatingBarMarkup, type FloatingBarItem } from './floating-bar';
+import { DEFAULT_ERASER_SIZE, MIN_ERASER_SIZE, MAX_ERASER_SIZE, ERASER_SIZE_STEP } from '../core/eraser';
 
 export interface ToolChild { tool: Tool; label: string; icon: string; key?: string }
 export interface ToolFamily { id: string; label: string; icon: string; key?: string; children?: ToolChild[]; options?: FloatingBarItem[]; menuId?: string }
@@ -30,7 +31,9 @@ export const TOOL_FAMILIES: ToolFamily[] = [
   { id: 'text', label: '文字', icon: 'text', key: 'T' },
   { id: 'note', label: '便签', icon: 'note', key: 'N' },
   { id: 'image', label: '插入图片', icon: 'image', key: 'I' },
-  { id: 'eraser', label: '橡皮擦', icon: 'eraser', key: 'E' },
+  { id: 'eraser', label: '橡皮擦', icon: 'eraser', key: 'E', options: [
+    { type: 'range', id: 'eraser-size', label: '橡皮大小', min: MIN_ERASER_SIZE, max: MAX_ERASER_SIZE, step: ERASER_SIZE_STEP, value: DEFAULT_ERASER_SIZE, unit: 'px' },
+  ] },
 ];
 
 export function familyForTool(tool: Tool): ToolFamily {

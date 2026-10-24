@@ -6,6 +6,7 @@ import { SelectionGlow } from './selection';
 import { isLinearElement, lineEndpointAt, lineEndpoints, lineRotationHandle } from '../core/linear';
 import { SELECTION_GAP, selectionFrame, objectRotationHandle, type CornerHandle } from '../core/selection-frame';
 import { inScope, selectedUnits } from '../core/groups';
+import { eraserRadius } from '../core/eraser';
 
 export type Handle = CornerHandle | 'start' | 'end' | 'rotate';
 export interface RenderState {
@@ -19,6 +20,7 @@ export interface RenderState {
   grid: boolean;
   dark: boolean;
   erasing: Map<string, BoardElement>;
+  eraserSize: number;
   groupScope?: string[];
 }
 
@@ -265,7 +267,7 @@ export class Renderer {
     if (this.state.tool === 'eraser' && this.state.cursor) {
       const p = screenToWorld(this.state.cursor, this.state.camera);
       ctx.strokeStyle = this.state.dark ? '#dbe6dc' : '#516b59'; ctx.fillStyle = '#9db4a223'; ctx.lineWidth = 1 / zoom;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 10 / zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, eraserRadius(this.state.eraserSize, zoom), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
   }
 

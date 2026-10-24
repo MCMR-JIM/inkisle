@@ -110,7 +110,7 @@ test('nonconsecutive multi-selection, erased upper holes and offscreen editing o
       createElement('rect', { id: 'upper', order: 1, x: 140, y: 140, w: 270, h: 180, fill: '#deedf5', erasures: [{ points: [{ x: 40, y: 50 }], radiusX: 15, radiusY: 15 }] }),
       createElement('rect', { id: 'top', order: 2, x: 250, y: 180, w: 210, h: 160, fill: '#faefc9' }),
     ];
-    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(['lower', 'top']), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: false, dark: false, erasing: new Map() };
+    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(['lower', 'top']), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: false, dark: false, erasing: new Map(), eraserSize: 20 };
     const renderer = new Renderer(new Scene(elements), main, overlay, state);
     const paint = () => new Promise<void>(resolve => { renderer.onFrame = () => resolve(); renderer.invalidate(); });
     const sample = (x: number, y: number) => [...overlay.getContext('2d')!.getImageData(x * renderer.dpr, y * renderer.dpr, 1, 1).data].slice(0, 3);

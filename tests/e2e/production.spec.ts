@@ -3,6 +3,24 @@ import { chooseTool, contextAction, selectValue } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
 
+test('production eraser wheel and shared slider keep cursor size, masks and preferences consistent across zoom', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await chooseTool(page, '便签'); await page.mouse.click(500, 300); await page.locator('#text-editor').fill('Eraser size'); await page.keyboard.press('Control+Enter');
+  await page.keyboard.press('e'); await page.locator('#eraser-size').fill('40'); await page.mouse.move(900, 400); await page.mouse.wheel(0, -100);
+  await expect(page.locator('#eraser-size-value')).toHaveText('42 px'); await expect(page.locator('#zoom-value')).toHaveText('100%');
+  await page.locator('#eraser-size').fill('40');
+  for (const zoom of [1, 2]) {
+    await selectValue(page, '#zoom-value', zoom); await page.keyboard.press('e'); await page.mouse.click(560, 360);
+    const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
+    const { readFile } = await import('node:fs/promises'); const doc = decodeDocument(new Uint8Array(await readFile((await download.path())!)));
+    expect(doc.elements[0].erasures!.at(-1)!.radiusX).toBeCloseTo(20 / zoom, 6);
+  }
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved'); await page.keyboard.press('e');
+  await expect(page.locator('#eraser-size')).toHaveValue('40');
+});
+
 test('production zoom presets and modal settings share the custom select', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
   await expect(page.locator('select')).toHaveCount(0);

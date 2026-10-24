@@ -22,7 +22,7 @@ test('measures startup, viewport rendering, long pen previews and incremental pe
     const startScene = performance.now();
     const scene = new Scene(elements);
     const indexBuildMs = performance.now() - startScene;
-    const state = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: false, erasing: new Map() };
+    const state = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: false, erasing: new Map(), eraserSize: 20 };
     const renderer = new Renderer(scene, canvas, overlay, state);
     await new Promise(requestAnimationFrame);
     const paint = async (main = true): Promise<number> => {

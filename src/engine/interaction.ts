@@ -13,12 +13,14 @@ import { wheelZoom } from '../core/camera';
 import { PressureSampler, pressureValue } from '../core/pressure';
 import { simplifyInk } from '../core/ink';
 import { inScope, selectionUnits, selectedUnits } from '../core/groups';
+import { eraserRadius, normalizeEraserSize, wheelEraserSize } from '../core/eraser';
 
 export interface InteractionHost {
   renderer: Renderer;
   styles: Partial<BoardElement>;
   onSelection(): void;
   onCamera(): void;
+  onEraserSize(size: number): void;
   setTool(tool: Tool): void;
   onContext(event: MouseEvent): void;
 }
@@ -31,7 +33,7 @@ type Gesture =
   | { type: 'endpoint'; endpoint: 'start' | 'end'; start: Point; original: BoardElement }
   | { type: 'rotate'; startAngle: number; startRotation: number; center: Point; original: BoardElement }
   | { type: 'marquee'; start: Point; previous: Set<string> }
-  | { type: 'erase'; last: Point; radius: number }
+  | { type: 'erase'; last: Point }
   | { type: 'pinch'; distance: number; midpoint: Point; camera: Camera };
 
 export class Interaction {
@@ -79,6 +81,13 @@ export class Interaction {
   get isGesturing(): boolean { return !!this.gesture; }
   get hasPendingGeometry(): boolean { return this.pendingCuts.size > 0; }
   async settle(): Promise<void> { await Promise.all(this.pendingCuts); }
+
+  setEraserSize(value: number): number {
+    const size = this.r.state.eraserSize = normalizeEraserSize(value);
+    if (this.gesture?.type === 'erase' && this.r.state.cursor) this.erase(screenToWorld(this.r.state.cursor, this.r.state.camera));
+    this.r.invalidate(false);
+    return size;
+  }
 
   selectElement(element: BoardElement, additive = false, deep = false): void {
     if (deep) this.r.state.groupScope = element.groupPath?.slice() ?? [];
@@ -175,7 +184,7 @@ export class Interaction {
       this.host.onSelection(); this.r.invalidate(false); return;
     }
     if (tool === 'eraser') {
-      this.gesture = { type: 'erase', last: world, radius: 10 / this.r.state.camera.zoom }; this.erase(world); return;
+      this.gesture = { type: 'erase', last: world }; this.erase(world); return;
     }
     if (tool === 'image') return;
     if (tool === 'text' || tool === 'note') {
@@ -339,7 +348,7 @@ export class Interaction {
       const sources = [...this.r.state.erasing.values()].map(el => {
         const original = this.r.scene.get(el.id)!;
         const count = original.erasures?.length ?? 0;
-        const erasures = el.erasures!.map((stroke, i) => i < count ? stroke : { ...stroke, points: simplifyPoints(stroke.points, g.radius * .02) });
+        const erasures = el.erasures!.map((stroke, i) => i < count ? stroke : { ...stroke, points: simplifyPoints(stroke.points, Math.min(stroke.radiusX, stroke.radiusY) * .02) });
         return { ...el, erasures };
       });
       const scene = this.r.scene;
@@ -360,10 +369,11 @@ export class Interaction {
     const gesture = this.gesture;
     if (gesture?.type !== 'erase') return;
     const previous = gesture.last;
+    const radius = eraserRadius(this.r.state.eraserSize, this.r.state.camera.zoom);
     const points = previous.x === point.x && previous.y === point.y ? [point] : [previous, point];
-    for (const el of this.r.scene.query(erasureBounds(points, gesture.radius))) {
+    for (const el of this.r.scene.query(erasureBounds(points, radius))) {
       const preview = this.r.state.erasing.get(el.id);
-      const next = eraseAt(preview ?? el, points, gesture.radius, !!preview);
+      const next = eraseAt(preview ?? el, points, radius, !!preview);
       if (next) this.r.state.erasing.set(el.id, next);
     }
     gesture.last = point;
@@ -372,6 +382,11 @@ export class Interaction {
 
   private wheel(e: WheelEvent): void {
     e.preventDefault();
+    if (this.r.state.tool === 'eraser' && e.deltaY && !e.ctrlKey && !e.metaKey && !this.space && (!this.gesture || this.gesture.type === 'erase')) {
+      this.r.state.cursor = this.point(e);
+      this.host.onEraserSize(wheelEraserSize(this.r.state.eraserSize, e.deltaY, e.deltaMode));
+      return;
+    }
     if (this.editing) this.finishEditing();
     if (e.ctrlKey || e.metaKey || !('ontouchstart' in window) && e.deltaMode === 1) {
       this.r.state.camera = zoomAt(this.r.state.camera, this.point(e), wheelZoom(this.r.state.camera.zoom, e.deltaY, e.deltaMode));
