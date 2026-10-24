@@ -144,8 +144,8 @@ kbd { font-family: inherit; font-size: 10px; font-weight: 400; white-space: nowr
 .custom-select:focus-visible, .custom-select[aria-expanded="true"] { outline: none; border-color: var(--accent); background: var(--accent-soft); }
 .custom-select > svg { color: var(--muted); }
 .custom-select > span { white-space: nowrap; }
-.select-options { position: fixed; z-index: 20; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.select-option { display: flex; align-items: center; justify-content: space-between; padding: 8px 9px; gap: 15px; border-radius: 4px; font-size: 11px; color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.select-options { position: fixed; z-index: 20; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.select-option { display: flex; align-items: center; justify-content: space-between; padding: 8px 9px; gap: 15px; border-radius: 4px; font-size: inherit; color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
 .select-option.highlighted { background: var(--accent-soft); }
 .select-option > svg { visibility: hidden; color: var(--accent); }
 .select-option[aria-selected="true"] > svg { visibility: visible; }
@@ -189,7 +189,7 @@ dialog { color: var(--ink); border: 1px solid var(--border); background: var(--s
 .selection-alignment-menu { position: fixed; z-index: 8; }
 .library-search { display: flex; gap: 10px; padding: 0 32px 20px; }
 .library-search input { flex: 1; min-width: 0; }
-.library-search .custom-select { width: auto; flex-shrink: 0; }
+.library-search .custom-select { width: 108px; flex-shrink: 0; }
 .library-search input, .library-search .custom-select, .settings-fields .custom-select, .export-fields .custom-select, .export-fields input { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); background: var(--surface-soft); font-size: 12px; }
 .library-empty { grid-column: 1 / -1; padding: 30px 0; text-align: center; }
 .board-card-title { width: calc(100% - 22px); padding: 2px 0; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid transparent; }

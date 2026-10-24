@@ -104,8 +104,9 @@ export class CustomSelect<T extends string | number = number> {
     this.active = this.enabledIndex(this.active, offset < 0 ? -1 : 1);
     this.render(); this.list.hidden = false;
     const rect = (this.settings.anchor ?? this.trigger).getBoundingClientRect();
-    const width = Math.min(window.innerWidth - 16, this.settings.anchor ? rect.width : Math.max(108, rect.width));
+    const width = Math.min(window.innerWidth - 16, rect.width);
     this.list.style.width = `${width}px`; this.list.style.maxHeight = 'none';
+    this.list.style.fontSize = getComputedStyle(this.trigger).fontSize;
     const desiredHeight = Math.min(this.list.getBoundingClientRect().height, 260);
     const above = Math.max(0, rect.top - 14), below = Math.max(0, window.innerHeight - rect.bottom - 14);
     const up = this.settings.placement === 'up' ? above > 0 : desiredHeight > below && above > below;

@@ -33,7 +33,7 @@ Tool option bars share icon-above-label buttons, size to their contents and stay
 
 `src/ui/floating-bar.ts` renders option bars from options, separators and switches. Pen, shape, line, selection and alignment bars reuse this frame and its button styles; the fill switch and main/zoom toolbar separators reuse the same primitives. Tool-specific classes only provide anchoring. Add choices through option data rather than another toolbar template or stylesheet. The common layout observer keeps notifications clear of any visible tool bar, including wrapped options.
 
-`src/ui/custom-select.ts` supplies every select: text size, zoom, toolbar placement, library sorting and image-export settings. It supports typed string/number values, disabled options, keyboard navigation and typeahead, an optional chevron, centered options and a separate anchor. Modal menus stay inside their dialog layer. Zoom formats arbitrary current values without appending them to its preset list. Reuse this component instead of native selects or a new menu implementation.
+`src/ui/custom-select.ts` supplies every select: text size, zoom, toolbar placement, library sorting and image-export settings. It supports typed string/number values, disabled options, keyboard navigation and typeahead, an optional chevron, centered options and a separate anchor. Menus match their anchor width and trigger font size, with no outer padding. The library sort trigger is 108 pixels wide to match its menu. Modal menus stay inside their dialog layer. Zoom formats arbitrary current values without appending them to its preset list. Reuse this component instead of native selects or a new menu implementation.
 
 ## Board library
 
