@@ -1,7 +1,23 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool, contextAction } from './helpers';
+import { chooseTool, contextAction, selectValue } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
+
+test('production zoom presets and modal settings share the custom select', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await expect(page.locator('select')).toHaveCount(0);
+  await selectValue(page, '#zoom-value', 2); await expect(page.locator('#zoom-value')).toHaveText('200%');
+  await expect(page.locator('#zoom-value svg')).toHaveCount(0);
+  await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', 'top');
+  await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
+  await page.locator('#export-button').click(); await page.locator('[data-action="export-png"]').click();
+  await selectValue(page, '#export-background', 'transparent'); await selectValue(page, '#export-format', 'svg');
+  await expect(page.locator('#export-scale')).toBeDisabled(); await expect(page.locator('#confirm-export')).toHaveText('导出 SVG');
+  await page.getByRole('button', { name: '关闭导出设置', exact: true }).click();
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#zoom-value')).toHaveText('200%');
+  await expect(page.locator('html')).toHaveAttribute('data-toolbar-position', 'top');
+});
 
 test('production unnamed blank boards stay out of the library until named or edited', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');

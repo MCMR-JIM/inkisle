@@ -17,6 +17,8 @@
 
 Open **Workspace settings** from the header or board menu to place the tool toolbar at the top or bottom. The default is bottom, and the preference is saved locally. Tool options open toward the canvas. The centered left style panel keeps its existing position.
 
+Click the current zoom percentage to open an upward preset menu (25%, 50%, 75%, 100%, 125%, 150%, 200%, 400%). Presets preserve the world point under the current screen center. The percentage keeps its compact, centered appearance without an arrow; the menu aligns with the full minus/percentage/plus row. Wheel, fit and keyboard zoom still update the displayed value; **Shift+0** resets to 100%.
+
 Selecting a shape or line with a shortcut also reveals its family options. **Shift+R** toggles the shapes family; **Shift+L** toggles the lines family. Both bindings, along with group and ungroup, can be changed in shortcut settings.
 
 Clicking a shape or line category immediately activates its last-used child, defaulting to rectangle or line, and deselects the previous tool.
@@ -30,6 +32,8 @@ Tool option bars share icon-above-label buttons, size to their contents and stay
 ## Shared UI controls
 
 `src/ui/floating-bar.ts` renders option bars from options, separators and switches. Pen, shape, line, selection and alignment bars reuse this frame and its button styles; the fill switch and main/zoom toolbar separators reuse the same primitives. Tool-specific classes only provide anchoring. Add choices through option data rather than another toolbar template or stylesheet. The common layout observer keeps notifications clear of any visible tool bar, including wrapped options.
+
+`src/ui/custom-select.ts` supplies every select: text size, zoom, toolbar placement, library sorting and image-export settings. It supports typed string/number values, disabled options, keyboard navigation and typeahead, an optional chevron, centered options and a separate anchor. Modal menus stay inside their dialog layer. Zoom formats arbitrary current values without appending them to its preset list. Reuse this component instead of native selects or a new menu implementation.
 
 ## Board library
 

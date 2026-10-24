@@ -42,6 +42,12 @@ export class App {
   private interaction: Interaction;
   private selectionToolbar: SelectionToolbar;
   private fontSize: CustomSelect;
+  private zoomLevel: CustomSelect;
+  private librarySort: CustomSelect<'updated' | 'title'>;
+  private exportScope: CustomSelect<'all' | 'selection'>;
+  private exportFormat: CustomSelect<'png' | 'svg'>;
+  private exportBackground: CustomSelect<'board' | 'transparent'>;
+  private exportScale: CustomSelect;
   private shortcuts = new ShortcutMap(readPreference('shortcuts'));
   private shortcutSettings: ShortcutSettings;
   private colorPickers: { stroke: ColorPicker; fill: ColorPicker };
@@ -73,10 +79,18 @@ export class App {
     bindFloatingBars(root, $('.toolbar'));
     const position = readPreference('toolbar-position') === 'top' ? 'top' : 'bottom';
     document.documentElement.dataset.toolbarPosition = position;
-    $<HTMLSelectElement>('#toolbar-position').value = position;
     bindWorkspaceInput();
     bindTooltips();
-    this.fontSize = new CustomSelect($('#font-size'), [14, 18, 20, 24, 32, 40, 56, 72].map(value => ({ value, label: `${value} px` })), 24, value => this.changeStyle({ fontSize: value }));
+    this.fontSize = new CustomSelect($('#font-size'), [14, 18, 20, 24, 32, 40, 56, 72].map(value => ({ value, label: `${value} px` })), 24, value => this.changeStyle({ fontSize: value }), { formatValue: value => `${Math.round(value)} px` });
+    this.zoomLevel = new CustomSelect($('#zoom-value'), [.25, .5, .75, 1, 1.25, 1.5, 2, 4].map(value => ({ value, label: formatZoom(value) })), 1, value => this.zoom(value), { placement: 'up', anchor: $('.zoom-steps'), showChevron: false, align: 'center', formatValue: formatZoom, customValues: false });
+    new CustomSelect<'top' | 'bottom'>($('#toolbar-position'), [{ value: 'bottom', label: '底部' }, { value: 'top', label: '顶部' }], position, value => {
+      document.documentElement.dataset.toolbarPosition = value; writePreference('toolbar-position', value);
+    });
+    this.librarySort = new CustomSelect<'updated' | 'title'>($('#library-sort'), [{ value: 'updated', label: '最近编辑' }, { value: 'title', label: '名称排序' }], 'updated', () => this.renderLibrary(this.libraryBoards));
+    this.exportScope = new CustomSelect<'all' | 'selection'>($('#export-scope'), [{ value: 'all', label: '整个画板' }, { value: 'selection', label: '已选对象' }], 'all', () => this.updateExportPreview());
+    this.exportFormat = new CustomSelect<'png' | 'svg'>($('#export-format'), [{ value: 'png', label: 'PNG 图片' }, { value: 'svg', label: 'SVG 矢量图' }], 'png', () => this.updateExportPreview());
+    this.exportBackground = new CustomSelect<'board' | 'transparent'>($('#export-background'), [{ value: 'board', label: '画板背景' }, { value: 'transparent', label: '透明背景' }], 'board', () => this.updateExportPreview());
+    this.exportScale = new CustomSelect($('#export-scale'), [1, 2, 3, 4].map(value => ({ value, label: `${value}×` })), 2, () => this.updateExportPreview());
     const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map() };
     document.documentElement.dataset.theme = state.dark ? 'dark' : 'light';
     this.renderer = new Renderer(this.scene, $('#canvas'), $('#interaction-canvas'), state);
@@ -253,7 +267,7 @@ export class App {
     on('theme-button', () => this.toggleTheme()); on('help-button', () => this.shortcutSettings.open());
     on('undo-button', () => this.undo()); on('redo-button', () => this.redo());
     on('zoom-out', () => this.zoom(this.renderer.state.camera.zoom / 1.25)); on('zoom-in', () => this.zoom(this.renderer.state.camera.zoom * 1.25));
-    on('zoom-value', () => this.zoom(1)); on('fit-button', () => this.fit());
+    on('fit-button', () => this.fit());
     on('fill-toggle', () => this.toggleFill());
     on('pressure-toggle', () => {
       const pressure = $('#pressure-toggle').getAttribute('aria-checked') !== 'true';
@@ -270,16 +284,12 @@ export class App {
     });
     on('library-import', () => $('#import-file').click());
     on('workspace-settings-button', () => $<HTMLDialogElement>('#workspace-settings-dialog').showModal());
-    $('#toolbar-position').addEventListener('change', () => {
-      const position = $<HTMLSelectElement>('#toolbar-position').value;
-      document.documentElement.dataset.toolbarPosition = position; writePreference('toolbar-position', position);
-    });
     on('exit-group', () => this.interaction.exitGroup());
     on('group-button', () => this.groupSelection()); on('ungroup-button', () => this.groupSelection(true));
     document.querySelectorAll<HTMLElement>('[data-align]').forEach(button => button.addEventListener('click', () => {
       this.scene.apply(alignmentChanges(this.scene.elements, this.renderer.state.selected, button.dataset.align as Alignment, this.renderer.state.groupScope ?? []), '对齐与分布'); this.selectionChanged();
     }));
-    for (const id of ['library-search', 'library-sort']) $(`#${id}`).addEventListener(id === 'library-search' ? 'input' : 'change', () => this.renderLibrary(this.libraryBoards));
+    $('#library-search').addEventListener('input', () => this.renderLibrary(this.libraryBoards));
     $('#export-options-form').addEventListener('input', () => this.updateExportPreview());
     $('#export-options-form').addEventListener('submit', event => { event.preventDefault(); void this.confirmImageExport(); });
     on('cancel-delete', () => $<HTMLDialogElement>('#confirm-dialog').close());
@@ -480,7 +490,7 @@ export class App {
   }
 
   private cameraChanged(persist = true): void {
-    $('#zoom-value').textContent = formatZoom(this.renderer.state.camera.zoom);
+    this.zoomLevel.setValue(this.renderer.state.camera.zoom);
     if (persist && this.ready) this.writer?.enqueue([], { camera: { ...this.renderer.state.camera } }, 650);
   }
 
@@ -642,16 +652,16 @@ export class App {
   private async export(format: 'file' | 'png' | 'svg', configured = false): Promise<void> {
     if (format !== 'file' && !configured) {
       this.interaction.finishEditing();
-      $<HTMLSelectElement>('#export-format').value = format;
-      $<HTMLSelectElement>('#export-scope').value = this.selected().length ? 'selection' : 'all';
-      $<HTMLOptionElement>('#export-scope option[value="selection"]').disabled = !this.selected().length;
+      this.exportFormat.setValue(format);
+      this.exportScope.setValue(this.selected().length ? 'selection' : 'all');
+      this.exportScope.setOptionDisabled('selection', !this.selected().length);
       this.updateExportPreview(); $<HTMLDialogElement>('#export-options-dialog').showModal(); return;
     }
     const exportOptions = configured ? this.imageExportOptions() : {};
     this.interaction.finishEditing();
     await this.interaction.settle();
     const doc = this.document();
-    const selectionOnly = configured && $<HTMLSelectElement>('#export-scope').value === 'selection';
+    const selectionOnly = configured && this.exportScope.value === 'selection';
     const elements = selectionOnly ? this.selected() : doc.elements;
     try {
       if (format === 'file') {
@@ -666,19 +676,19 @@ export class App {
   }
 
   private imageExportOptions(): ExportOptions {
-    return { padding: $<HTMLInputElement>('#export-padding').valueAsNumber, transparent: $<HTMLSelectElement>('#export-background').value === 'transparent', scale: +$<HTMLSelectElement>('#export-scale').value };
+    return { padding: $<HTMLInputElement>('#export-padding').valueAsNumber, transparent: this.exportBackground.value === 'transparent', scale: this.exportScale.value };
   }
 
   private updateExportPreview(): void {
-    const elements = $<HTMLSelectElement>('#export-scope').value === 'selection' ? this.selected() : this.scene.elements;
-    const bounds = unionBounds(elements), format = $<HTMLSelectElement>('#export-format').value;
+    const elements = this.exportScope.value === 'selection' ? this.selected() : this.scene.elements;
+    const bounds = unionBounds(elements), format = this.exportFormat.value;
     $('#export-summary').textContent = `整个画板 ${this.scene.size} 个元素 · 已选 ${this.selected().length} 个元素`;
-    $<HTMLSelectElement>('#export-scale').disabled = format === 'svg';
+    this.exportScale.setDisabled(format === 'svg');
     $('#confirm-export').textContent = `导出 ${format.toUpperCase()}`;
     try {
       if (!bounds) throw new Error('当前范围没有内容，请选择其他范围或先画点什么。');
       const size = exportDimensions(bounds, this.imageExportOptions());
-      $('#export-dimensions').textContent = format === 'svg' ? `${elements.length} 个元素 · 矢量图可无损缩放` : `${size.width} × ${size.height} px · ${elements.length} 个元素${size.scale < +$<HTMLSelectElement>('#export-scale').value ? ' · 已按大图上限调整倍率' : ''}`;
+      $('#export-dimensions').textContent = format === 'svg' ? `${elements.length} 个元素 · 矢量图可无损缩放` : `${size.width} × ${size.height} px · ${elements.length} 个元素${size.scale < this.exportScale.value ? ' · 已按大图上限调整倍率' : ''}`;
       $<HTMLButtonElement>('#confirm-export').disabled = this.exportingImage;
     } catch (error) { $('#export-dimensions').textContent = message(error); $<HTMLButtonElement>('#confirm-export').disabled = true; }
   }
@@ -688,7 +698,7 @@ export class App {
     if (this.exportingImage) return;
     this.exportingImage = true;
     button.disabled = true;
-    const format = $<HTMLSelectElement>('#export-format').value as 'png' | 'svg';
+    const format = this.exportFormat.value;
     try { await this.export(format, true); }
     finally { this.exportingImage = false; this.updateExportPreview(); }
   }
@@ -801,7 +811,7 @@ export class App {
     this.libraryBoards = boards;
     const query = $<HTMLInputElement>('#library-search').value.trim().toLocaleLowerCase();
     const visible = boards.filter(board => board.title.toLocaleLowerCase().includes(query));
-    if ($<HTMLSelectElement>('#library-sort').value === 'title') visible.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN', { numeric: true }));
+    if (this.librarySort.value === 'title') visible.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN', { numeric: true }));
     $('#board-count').textContent = query ? `${visible.length} / ${boards.length} 块画板` : `${boards.length} 块画板`;
     const list = $('#board-list'); list.replaceChildren();
     if (!visible.length) { const empty = document.createElement('p'); empty.className = 'library-empty'; empty.textContent = query ? '没有找到匹配的画板，试试其他名称。' : '还没有画板，创建一块开始记录。'; list.append(empty); }

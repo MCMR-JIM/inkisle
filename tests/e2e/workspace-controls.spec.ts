@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, selectValue } from './helpers';
 
 test('tool shortcuts reveal the matching family and family shortcuts can be rebound', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
@@ -27,14 +27,14 @@ test('toolbar placement persists, opens options toward the canvas and keeps the 
   let toolbar = (await page.locator('.toolbar').boundingBox())!, menu = (await page.locator('#tool-menu-shapes').boundingBox())!;
   expect(menu.y + menu.height).toBeLessThan(toolbar.y);
   await page.locator('#workspace-settings-button').click();
-  await page.locator('#toolbar-position').selectOption('top');
+  await selectValue(page, '#toolbar-position', 'top');
   await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
   toolbar = (await page.locator('.toolbar').boundingBox())!; menu = (await page.locator('#tool-menu-shapes').boundingBox())!;
   expect(menu.y).toBeGreaterThan(toolbar.y + toolbar.height);
   expect((await page.locator('#properties').boundingBox())!.y).toBeCloseTo(properties.y, 1);
   await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-toolbar-position', 'top');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('#workspace-settings-button').click(); await page.locator('#toolbar-position').selectOption('bottom');
+  await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', 'bottom');
   await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
   await page.keyboard.press('r');
   for (const selector of ['.toolbar > .tool-button', '#tool-menu-shapes > button']) {
@@ -66,6 +66,6 @@ test('the library supports search, inline rename, sorting and independent board 
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
   await page.locator('#library-button').click(); await page.locator('#library-search').fill('no such board');
   await expect(page.locator('.library-empty')).toContainText('没有找到');
-  await page.locator('#library-search').fill('Project'); await page.locator('#library-sort').selectOption('title');
+  await page.locator('#library-search').fill('Project'); await selectValue(page, '#library-sort', 'title');
   await expect(page.locator('.board-card-title').first()).toHaveValue('Project Alpha');
 });

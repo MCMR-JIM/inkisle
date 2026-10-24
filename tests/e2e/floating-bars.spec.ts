@@ -1,3 +1,4 @@
+import { selectValue } from './helpers';
 import { expect, test } from '@playwright/test';
 
 test('tool option bars share sizing, center around their content and keep the trailing switch separated', async ({ page }) => {
@@ -5,7 +6,7 @@ test('tool option bars share sizing, center around their content and keep the tr
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     for (const position of ['top', 'bottom']) {
-      await page.locator('#workspace-settings-button').click(); await page.locator('#toolbar-position').selectOption(position);
+      await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', position);
       await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
       let reference: unknown;
       for (const [key, id] of [['p', 'pressure-setting'], ['r', 'tool-menu-shapes'], ['l', 'tool-menu-lines']]) {

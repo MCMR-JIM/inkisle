@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool, contextAction } from './helpers';
+import { chooseTool, contextAction, selectValue } from './helpers';
 
 async function centered(page: Page, selector = '#properties'): Promise<void> {
   await expect.poll(async () => {
@@ -63,7 +63,7 @@ test('pen options follow toolbar placement and open from the keyboard without ch
   await page.goto('/'); await page.locator('#quick-new').click();
   const before = await page.locator('#properties').boundingBox();
   for (const position of ['top', 'bottom']) {
-    await page.locator('#workspace-settings-button').click(); await page.locator('#toolbar-position').selectOption(position);
+    await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', position);
     await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
     await page.keyboard.press('p'); await expect(page.locator('#pressure-setting')).toBeVisible();
     const options = (await page.locator('#pressure-setting').boundingBox())!, toolbar = (await page.locator('.toolbar').boundingBox())!;

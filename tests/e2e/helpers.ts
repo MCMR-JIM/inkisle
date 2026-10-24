@@ -1,5 +1,12 @@
 import type { Page } from '@playwright/test';
 
+export async function selectValue(page: Page, selector: string, value: string | number): Promise<void> {
+  const trigger = page.locator(selector);
+  await trigger.click();
+  const list = page.locator(`#${await trigger.getAttribute('aria-controls')}`);
+  await list.locator(`[role="option"][data-value="${value}"]`).click();
+}
+
 const familyChildren: Record<string, string> = {
   轨迹识别: 'shapes', 矩形: 'shapes', 圆角矩形: 'shapes', 椭圆: 'shapes', 菱形: 'shapes', 三角形: 'shapes', 五边形: 'shapes', 六边形: 'shapes',
   线条: 'lines', 箭头: 'lines', 双向箭头: 'lines',
