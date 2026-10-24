@@ -41,6 +41,32 @@ test('dragging an endpoint preserves the other endpoint and Shift snaps to 45 de
   expect(Math.abs(Math.atan2(after.h, after.w) / (Math.PI / 4) - Math.round(Math.atan2(after.h, after.w) / (Math.PI / 4)))).toBeLessThan(.001);
 });
 
+test('a line rotation stem follows the pointer below the object and survives undo, source round-trip and reopening', async ({ page }) => {
+  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.locator('[data-family="lines"]').click();
+  await page.mouse.move(500, 400); await page.mouse.down(); await page.mouse.move(800, 400); await page.mouse.up();
+  expect((await readElements(page))[0].rotationHandleSide).toBe(1);
+  await page.getByRole('button', { name: '选择工具', exact: true }).click(); await page.mouse.click(650, 400);
+  const handleAt = async (x: number, y: number) => {
+    await expect.poll(() => page.locator('#interaction-canvas').evaluate((canvas: HTMLCanvasElement, point) => {
+      const dpr = canvas.width / canvas.clientWidth;
+      return [...canvas.getContext('2d')!.getImageData(Math.round(point.x * dpr), Math.round(point.y * dpr), 1, 1).data];
+    }, { x, y })).toEqual([246, 250, 255, 255]);
+  };
+  await page.mouse.move(650, 372); await page.mouse.down();
+  for (const degrees of [30, 89, 91, 135, 180]) {
+    const angle = degrees * Math.PI / 180, x = 650 + 28 * Math.sin(angle), y = 400 - 28 * Math.cos(angle);
+    await page.mouse.move(x, y); await handleAt(x, y);
+  }
+  await page.mouse.up(); await readElements(page); await handleAt(650, 428);
+  await page.keyboard.press('Control+z'); await handleAt(650, 372);
+  await page.keyboard.press('Control+Shift+z'); await handleAt(650, 428);
+  const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
+  await page.locator('#import-file').setInputFiles((await download.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
+  await page.keyboard.press('Control+a'); await handleAt(650, 428);
+  await page.reload(); await readElements(page); await page.keyboard.press('Control+a'); await handleAt(650, 428);
+});
+
 test('Shift rotation snaps a polygon to 15 degrees and survives refresh', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '新建画板', exact: true }).first().click();

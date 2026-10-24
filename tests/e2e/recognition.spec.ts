@@ -69,7 +69,7 @@ test('arbitrary triangles and ellipses are recognized and every other stroke is 
   await chooseTool(page, '轨迹识别');
   await trace(page, [{ x: 500, y: 600 }, { x: 550, y: 650 }, { x: 600, y: 600 }, { x: 650, y: 650 }, { x: 700, y: 600 }]);
   elements = await read(page); expect(['triangle', 'rect', 'ellipse']).toContain(elements[2].kind); expect(elements[2].points).toHaveLength(0);
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await page.keyboard.press('Control+z'); await expect(page.locator('#element-count')).toHaveText('2 个元素');
   await page.keyboard.press('Control+Shift+z'); await expect(page.locator('#element-count')).toHaveText('3 个元素');
   await expect(page.locator('#save-status')).toContainText('已保存在本机');
@@ -86,12 +86,13 @@ test('open contours and single clicks never remain as pen objects in shape recog
   expect(elements[1].kind).toBe('ellipse'); expect(elements[1].points).toHaveLength(0);
 });
 
-test('all eight shape options fit a single centered row on small screens', async ({ page }) => {
+test('all eight shape options fit two touch-friendly rows on small screens', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/'); await page.locator('[data-family="shapes"]').click();
   const menu = page.locator('#tool-menu-shapes'), box = (await menu.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(8); expect(box.x + box.width).toBeLessThanOrEqual(382);
   const children = await menu.locator('[data-tool-child]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
-  expect(children).toHaveLength(8); expect(Math.max(...children.map(b => b.y)) - Math.min(...children.map(b => b.y))).toBeLessThan(1);
+  expect(children).toHaveLength(8); expect(new Set(children.map(b => b.y)).size).toBe(2);
+  expect(children.every(b => b.width >= 44 && b.height >= 44)).toBe(true);
   for (const child of children) expect(child.x + child.width).toBeLessThanOrEqual(382);
 });
 
@@ -174,7 +175,9 @@ test('four-sided diagonal gestures do not add expensive contour fitting after th
 test('shape recognition works offline after the application is opened', async ({ page, context }) => {
   await blank(page); await chooseTool(page, '轨迹识别');
   // Preload the test's inspection helper before taking the network away.
-  await read(page);
+  await page.evaluate(async () => {
+    const path = '/src/storage/repository.ts'; await import(/* @vite-ignore */ path);
+  });
   await context.setOffline(true);
   await trace(page, outline([{ x: 600, y: 280 }, { x: 710, y: 465 }, { x: 490, y: 470 }]));
   const [el] = await read(page);

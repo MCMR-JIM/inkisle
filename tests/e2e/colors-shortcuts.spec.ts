@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 
 async function blank(page: Page) {
   await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
@@ -34,7 +34,7 @@ test('color shortcuts change selected elements, undo correctly and preserve lock
   await page.keyboard.press('Tab'); const next = await active(page); expect(next).not.toBe(initial);
   await page.keyboard.press('Control+z'); expect(await active(page)).toBe(initial);
   await page.keyboard.press('Control+Shift+z'); expect(await active(page)).toBe(next);
-  await page.locator('#lock-button').click(); await page.keyboard.press('Tab'); expect(await active(page)).toBe(next);
+  await contextAction(page, 'lock'); await page.keyboard.press('Tab'); expect(await active(page)).toBe(next);
 });
 
 test('both custom palettes recover invalid HEX and commit while cancel restores the active edit', async ({ page }) => {

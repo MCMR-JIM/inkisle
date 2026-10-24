@@ -22,7 +22,7 @@ test('measures startup, viewport rendering, long pen previews and incremental pe
     const startScene = performance.now();
     const scene = new Scene(elements);
     const indexBuildMs = performance.now() - startScene;
-    const state = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: false, erasing: new Map() };
+    const state = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: false, erasing: new Map(), eraserSize: 20 };
     const renderer = new Renderer(scene, canvas, overlay, state);
     await new Promise(requestAnimationFrame);
     const paint = async (main = true): Promise<number> => {
@@ -67,6 +67,11 @@ test('measures startup, viewport rendering, long pen previews and incremental pe
     for (let i = 0; i < 30; i++) {
       penFrames.push(await paint(false));
     }
+    const penPreview = renderer.state.preview[0];
+    renderer.state.preview = [{ ...penPreview, opacity: .35, strokeWidth: 20 }];
+    const highlighterFrames: number[] = [];
+    for (let i = 0; i < 30; i++) highlighterFrames.push(await paint(false));
+    renderer.state.preview = [penPreview];
     renderer.state.preview = [{ ...renderer.state.preview[0], pressureEnabled: true, points: renderer.state.preview[0].points.map((p: { x: number; y: number }, i: number) => ({ ...p, pressure: .5 + .45 * Math.sin(i / 80) })) }];
     const pressureFrames: number[] = [];
     for (let i = 0; i < 30; i++) pressureFrames.push(await paint(false));
@@ -84,7 +89,7 @@ test('measures startup, viewport rendering, long pen previews and incremental pe
     return {
       environment: { userAgent: navigator.userAgent, dpr: devicePixelRatio, viewport: '1440x960', server: 'Vite development' },
       startup: (window as unknown as { liubai: { diagnostics: () => object } }).liubai.diagnostics(),
-      scene: { elements: 5000, visible, overviewVisible, indexBuildMs, frameP50Ms: percentile(frames, .5), frameP95Ms: percentile(frames, .95), selectedLayeredPreviewP95Ms: percentile(selectedFrames, .95), overviewColdMs: overviewFrames[0], overviewP95Ms: percentile(overviewFrames, .95), erasedSceneP95Ms: percentile(eraserFrames, .95), longPenP95Ms: percentile(penFrames, .95), pressurePenP95Ms: percentile(pressureFrames, .95) },
+      scene: { elements: 5000, visible, overviewVisible, indexBuildMs, frameP50Ms: percentile(frames, .5), frameP95Ms: percentile(frames, .95), selectedLayeredPreviewP95Ms: percentile(selectedFrames, .95), overviewColdMs: overviewFrames[0], overviewP95Ms: percentile(overviewFrames, .95), erasedSceneP95Ms: percentile(eraserFrames, .95), longPenP95Ms: percentile(penFrames, .95), highlighterP95Ms: percentile(highlighterFrames, .95), pressurePenP95Ms: percentile(pressureFrames, .95) },
       storage: { bytes: bytes.length, encodeMs, createMs, appendP50Ms: percentile(writes, .5), appendP95Ms: percentile(writes, .95), reopenMs },
     };
   });
@@ -95,5 +100,6 @@ test('measures startup, viewport rendering, long pen previews and incremental pe
   expect(results.scene.erasedSceneP95Ms).toBeLessThan(100);
   expect(results.scene.selectedLayeredPreviewP95Ms).toBeLessThan(50);
   expect(results.scene.pressurePenP95Ms).toBeLessThan(50);
+  expect(results.scene.highlighterP95Ms).toBeLessThan(50);
   expect(results.storage.appendP95Ms).toBeLessThan(100);
 });

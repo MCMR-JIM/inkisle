@@ -15,6 +15,8 @@ export interface BoardElement extends Bounds {
   order: number;
   orderPath?: number[];
   rotation: number;
+  /** Initial side of a line's rotation stem, retained when editing endpoints. */
+  rotationHandleSide?: 1 | -1;
   stroke: string;
   fill: string;
   /** Selected fill retained while the rendered fill is transparent. */
@@ -34,6 +36,8 @@ export interface BoardElement extends Bounds {
   path?: PathGeometry;
   /** Optional local vertices for a recognized scalene triangle. */
   vertices?: Point[];
+  /** Stable group ancestry, ordered from the outermost to the innermost group. */
+  groupPath?: string[];
 }
 
 export interface BoardDocument {
@@ -78,6 +82,10 @@ export function createDocument(title = '未命名画板'): BoardDocument {
     id: crypto.randomUUID(), title, created: now, updated: now,
     camera: { x: 0, y: 0, zoom: 1 }, background: '#f8f9f6', elements: [],
   };
+}
+
+export function isEmptyUntitled(doc: Pick<BoardDocument, 'title' | 'elements'>): boolean {
+  return doc.elements.length === 0 && (!doc.title.trim() || doc.title.trim() === '未命名画板');
 }
 
 /** A split inherits its parent's layer, with exact lexicographic child ranks. */

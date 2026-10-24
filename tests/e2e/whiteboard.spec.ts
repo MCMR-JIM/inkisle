@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 
 test('creates a drawing, edits it, undoes and restores it from local storage', async ({ page }) => {
   const errors: string[] = [];
@@ -143,6 +143,7 @@ test('exports valid PNG and SVG assets and supports image insertion', async ({ p
   const svgPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).click();
   await page.locator('[data-action="export-svg"]').click();
+  await page.locator('#confirm-export').click();
   const svg = await svgPromise;
   const stream = await svg.createReadStream();
   const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
@@ -156,6 +157,7 @@ test('exports valid PNG and SVG assets and supports image insertion', async ({ p
   const pngPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).click();
   await page.locator('[data-action="export-png"]').click();
+  await page.locator('#confirm-export').click();
   const png = await pngPromise;
   expect(png.suggestedFilename()).toMatch(/\.png$/);
 });
@@ -203,7 +205,7 @@ test('resizes, styles, locks and erases an element with real pointer gestures', 
   await page.mouse.move(701, 421); await page.mouse.down(); await page.mouse.move(801, 521, { steps: 8 }); await page.mouse.up();
   await page.locator('[data-property="fill"][data-color="#e6eee5"]').click();
   await page.locator('#fill-toggle').click();
-  await page.locator('#lock-button').click();
+  await contextAction(page, 'lock');
   await page.keyboard.press('Delete');
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
   const downloadPromise = page.waitForEvent('download');
@@ -219,7 +221,7 @@ test('resizes, styles, locks and erases an element with real pointer gestures', 
   expect(result.w).toBeGreaterThan(290);
   expect(result.h).toBeGreaterThan(210);
   expect(result.fill).toBe('#e6eee5'); expect(result.locked).toBe(true);
-  await page.locator('#lock-button').click();
+  await contextAction(page, 'lock');
   await page.getByRole('button', { name: '橡皮擦', exact: true }).click();
   await page.mouse.click(600, 400);
   await expect(page.locator('#element-count')).toHaveText('1 个元素');

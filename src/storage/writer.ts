@@ -1,7 +1,7 @@
-import type { BoardDocument, Change } from '../core/model';
+import { isEmptyUntitled, type BoardDocument, type Change } from '../core/model';
 import type { Repository, MetadataPatch } from './repository';
 
-export type SaveState = 'saving' | 'saved' | 'error';
+export type SaveState = 'draft' | 'saving' | 'saved' | 'error';
 
 /** Serializes durable commits. A failed batch is retained ahead of newer changes. */
 export class Writer {
@@ -14,9 +14,10 @@ export class Writer {
   private metadataDirty = false;
   lastWriteMs = 0;
 
-  constructor(private repo: Repository, private getDocument: () => BoardDocument, private onState: (state: SaveState, error?: unknown) => void) {}
+  constructor(private repo: Repository, private getDocument: () => BoardDocument, private onState: (state: SaveState, error?: unknown) => void, private persisted = true) {}
 
   get pending(): boolean { return !!(this.changes.length || this.metadataDirty || this.running); }
+  get stored(): boolean { return this.persisted; }
 
   enqueue(changes: Change[], patch: MetadataPatch = {}, delay = 180): void {
     if (this.stopped) return;
@@ -43,9 +44,19 @@ export class Writer {
       const snapshot = this.getDocument();
       try {
         const start = performance.now();
-        await this.repo.append(snapshot.id, batch, { elementCount: snapshot.elements.length, ...patch });
+        if (isEmptyUntitled(snapshot)) {
+          if (this.persisted) await this.repo.remove(snapshot.id, true);
+          this.persisted = false; this.commands = 0;
+        } else if (!this.persisted) {
+          // The first meaningful edit is a full snapshot, including all edits
+          // that were batched while the board was only in memory.
+          await this.repo.create(snapshot);
+          this.persisted = true;
+        } else {
+          await this.repo.append(snapshot.id, batch, { elementCount: snapshot.elements.length, ...patch });
+          this.commands++;
+        }
         this.lastWriteMs = performance.now() - start;
-        this.commands++;
         if (this.commands >= 64) {
           await this.repo.compact(snapshot);
           this.commands = 0;
@@ -57,7 +68,7 @@ export class Writer {
         return false;
       }
     }
-    this.onState('saved');
+    this.onState(this.persisted ? 'saved' : 'draft');
     return true;
   }
 

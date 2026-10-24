@@ -5,8 +5,9 @@ import { arrowHeadKinds } from '../core/linear';
 import { rotationCenter } from '../core/transforms';
 import { shapeVertices } from '../core/paths';
 import { inkPath, smoothInk } from '../core/ink';
+import { textFont, textLeading, wrapText } from './text-layout';
 
-export const CANVAS_FONT = '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+export { CANVAS_FONT, wrapText } from './text-layout';
 const paths = new Map<string, { source: BoardElement; path: Path2D; width: number; pressure: boolean; dash: boolean }>();
 const geometryPaths = new WeakMap<NonNullable<BoardElement['path']>, { fill: Path2D; stroke: Path2D }>();
 const inkPaths = new WeakMap<NonNullable<BoardElement['path']>, { width: number; dash: boolean; path: Path2D }>();
@@ -32,20 +33,6 @@ export async function preloadImages(elements: BoardElement[]): Promise<void> {
     const image = imageFor(el.src!);
     if (!image.complete) await image.decode().catch(() => {});
   }));
-}
-
-export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split('\n')) {
-    if (!paragraph) { lines.push(''); continue; }
-    let line = '';
-    for (const character of paragraph) {
-      if (line && ctx.measureText(line + character).width > maxWidth) { lines.push(line); line = ''; }
-      line += character;
-    }
-    lines.push(line);
-  }
-  return lines;
 }
 
 function penPath(points: Point[]): Path2D {
@@ -144,6 +131,7 @@ function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, pr
     if (el.fontSize * zoom >= 5) drawText(ctx, el, b.x, b.y, b.w || 1000, undefined, false, ink);
   } else if (el.kind === 'line' || el.kind === 'arrow' || el.kind === 'bidirectional-arrow') {
     ctx.beginPath(); ctx.moveTo(el.x, el.y); ctx.lineTo(el.x + el.w, el.y + el.h); ctx.stroke();
+    ctx.setLineDash([]);
     const heads = arrowHeadKinds(el);
     if (heads.end) drawArrowHead(ctx, { x: el.x + el.w, y: el.y + el.h }, { x: el.x, y: el.y }, el.strokeWidth);
     if (heads.start) drawArrowHead(ctx, { x: el.x, y: el.y }, { x: el.x + el.w, y: el.y + el.h }, el.strokeWidth);
@@ -187,11 +175,11 @@ function drawArrowHead(ctx: CanvasRenderingContext2D, tip: Point, tail: Point, s
 }
 
 function drawText(ctx: CanvasRenderingContext2D, el: BoardElement, x: number, y: number, width: number, height?: number, centered = false, ink = el.stroke): void {
-  ctx.font = `${el.kind === 'text' && el.fontSize >= 32 ? '600' : '400'} ${el.fontSize}px ${CANVAS_FONT}`;
+  ctx.font = textFont(el);
   ctx.fillStyle = ink;
   ctx.textBaseline = 'top';
   const lines = wrapText(ctx, el.text, width);
-  const leading = el.fontSize * 1.55;
+  const leading = textLeading(el);
   if (height !== undefined) {
     ctx.beginPath(); ctx.rect(x - 2, y - 2, width + 4, height + 4); ctx.clip();
   }

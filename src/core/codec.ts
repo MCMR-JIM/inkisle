@@ -38,14 +38,26 @@ export function validateDocument(input: unknown): asserts input is BoardDocument
   assert(typeof doc.background === 'string' && color.test(doc.background));
   assert(Array.isArray(doc.elements) && doc.elements.length <= 100000);
   const ids = new Set<string>();
+  const parents = new Map<string, string>();
   let samples = 0;
   for (const el of doc.elements) {
     assert(el && typeof el === 'object' && kinds.has(el.kind));
     assert(typeof el.id === 'string' && el.id.length > 0 && el.id.length <= 120 && !ids.has(el.id));
     ids.add(el.id);
+    if (el.groupPath !== undefined) {
+      assert(Array.isArray(el.groupPath) && el.groupPath.length <= 32);
+      const ancestry = new Set<string>();
+      for (let i = 0; i < el.groupPath.length; i++) {
+        const id = el.groupPath[i], parent = JSON.stringify(el.groupPath.slice(0, i));
+        assert(typeof id === 'string' && id.length > 0 && id.length <= 120 && !ancestry.has(id));
+        assert(!parents.has(id) || parents.get(id) === parent);
+        ancestry.add(id); parents.set(id, parent);
+      }
+    }
     for (const key of ['x', 'y', 'w', 'h'] as const) assert(finite(el[key]));
     assert(finite(el.order, 1e16));
     assert(el.rotation === undefined || finite(el.rotation, Math.PI * 1000));
+    assert(el.rotationHandleSide === undefined || el.rotationHandleSide === 1 || el.rotationHandleSide === -1);
     if (el.orderPath !== undefined) assert(Array.isArray(el.orderPath) && el.orderPath.length <= 256 && el.orderPath.every(n => Number.isSafeInteger(n) && n >= 0));
     assert(typeof el.stroke === 'string' && color.test(el.stroke) && typeof el.fill === 'string' && color.test(el.fill));
     assert(el.fillColor === undefined || typeof el.fillColor === 'string' && el.fillColor !== 'transparent' && color.test(el.fillColor));

@@ -1,23 +1,26 @@
 import { createElement, type BoardElement, type Bounds, type Camera, type Change, type Point, type Tool } from '../core/model';
-import { containsBounds, elementBounds, expandBounds, hitTest, normalizeBounds, screenToWorld, simplifyPoints, unionBounds, zoomAt } from '../core/geometry';
+import { containsBounds, expandBounds, hitTest, normalizeBounds, screenToWorld, simplifyPoints, unionBounds, zoomAt } from '../core/geometry';
 import { Renderer } from './renderer';
-import { CANVAS_FONT, wrapText } from './draw';
+import { editorTextOffset, textFont, textLayout } from './text-layout';
 import { eraseAt, erasureBounds, scaleErasures } from '../core/erasure';
 import { transformPath } from '../core/paths';
 import { Cutter } from './cutter';
-import { isLinearElement, lineEndpoints, lineRotationHandle, withLineEndpoints } from '../core/linear';
-import { rotationCenter, snapLineEndpoint, snapRotation } from '../core/transforms';
+import { isLinearElement, lineEndpoints, lineHandleSide, lineRotationHandle, withLineEndpoints } from '../core/linear';
+import { rotatePoint, rotationCenter, snapLineEndpoint, snapRotation } from '../core/transforms';
 import { selectionFrame, selectionPadding, resizeFromCorner, type CornerHandle } from '../core/selection-frame';
 import { recognizeShape } from '../core/recognition';
 import { wheelZoom } from '../core/camera';
 import { PressureSampler, pressureValue } from '../core/pressure';
 import { simplifyInk } from '../core/ink';
+import { inScope, selectionUnits, selectedUnits } from '../core/groups';
+import { eraserRadius, normalizeEraserSize, wheelEraserSize } from '../core/eraser';
 
 export interface InteractionHost {
   renderer: Renderer;
   styles: Partial<BoardElement>;
   onSelection(): void;
   onCamera(): void;
+  onEraserSize(size: number): void;
   setTool(tool: Tool): void;
   onContext(event: MouseEvent): void;
 }
@@ -30,7 +33,7 @@ type Gesture =
   | { type: 'endpoint'; endpoint: 'start' | 'end'; start: Point; original: BoardElement }
   | { type: 'rotate'; startAngle: number; startRotation: number; center: Point; original: BoardElement }
   | { type: 'marquee'; start: Point; previous: Set<string> }
-  | { type: 'erase'; last: Point; radius: number }
+  | { type: 'erase'; last: Point }
   | { type: 'pinch'; distance: number; midpoint: Point; camera: Camera };
 
 export class Interaction {
@@ -78,6 +81,42 @@ export class Interaction {
   get isGesturing(): boolean { return !!this.gesture; }
   get hasPendingGeometry(): boolean { return this.pendingCuts.size > 0; }
   async settle(): Promise<void> { await Promise.all(this.pendingCuts); }
+
+  setEraserSize(value: number): number {
+    const size = this.r.state.eraserSize = normalizeEraserSize(value);
+    if (this.gesture?.type === 'erase' && this.r.state.cursor) this.erase(screenToWorld(this.r.state.cursor, this.r.state.camera));
+    this.r.invalidate(false);
+    return size;
+  }
+
+  selectElement(element: BoardElement, additive = false, deep = false): void {
+    if (deep) this.r.state.groupScope = element.groupPath?.slice() ?? [];
+    if (!inScope(element, this.r.state.groupScope ?? [])) { this.r.state.groupScope = []; this.r.state.selected.clear(); }
+    const unit = selectionUnits(this.r.scene.elements, this.r.state.groupScope ?? []).find(unit => unit.elements.some(el => el.id === element.id));
+    if (!unit) return;
+    if (additive) {
+      const remove = unit.elements.every(el => this.r.state.selected.has(el.id));
+      for (const el of unit.elements) if (remove) this.r.state.selected.delete(el.id); else this.r.state.selected.add(el.id);
+    } else if (deep || !unit.elements.every(el => this.r.state.selected.has(el.id))) this.r.state.selected = new Set(unit.elements.map(el => el.id));
+    this.host.onSelection(); this.r.invalidate(false);
+  }
+
+  exitGroup(): boolean {
+    const scope = this.r.state.groupScope ?? [];
+    if (!scope.length) return false;
+    this.finishEditing(); this.cancel(); this.r.state.groupScope = scope.slice(0, -1);
+    this.r.state.selected = new Set(this.r.scene.elements.filter(el => inScope(el, scope)).map(el => el.id));
+    this.host.onSelection(); return true;
+  }
+
+  private enterGroup(element: BoardElement): boolean {
+    const scope = this.r.state.groupScope ?? [];
+    if (!inScope(element, scope) || !element.groupPath?.[scope.length]) return false;
+    this.finishEditing(); this.cancel();
+    this.r.state.groupScope = element.groupPath.slice(0, scope.length + 1);
+    this.r.state.selected.clear(); this.selectElement(element);
+    return true;
+  }
 
   private point(e: { clientX: number; clientY: number }): Point {
     const rect = this.r.interactionCanvas.getBoundingClientRect();
@@ -134,11 +173,8 @@ export class Interaction {
       }
       const hit = this.hit(world);
       if (hit) {
-        if (e.shiftKey) {
-          if (this.r.state.selected.has(hit.id)) this.r.state.selected.delete(hit.id);
-          else this.r.state.selected.add(hit.id);
-        } else if (!this.r.state.selected.has(hit.id)) this.r.state.selected = new Set([hit.id]);
-        const originals = [...this.r.state.selected].map(id => this.r.scene.get(id)).filter((el): el is BoardElement => !!el && !el.locked);
+        this.selectElement(hit, e.shiftKey, e.ctrlKey || e.metaKey);
+        const originals = selectedUnits(this.r.scene.elements, this.r.state.selected, this.r.state.groupScope ?? []).filter(unit => !unit.elements.some(el => el.locked)).flatMap(unit => unit.elements);
         if (originals.length) this.gesture = { type: 'move', start: world, originals };
       } else {
         const previous = e.shiftKey ? new Set(this.r.state.selected) : new Set<string>();
@@ -148,17 +184,17 @@ export class Interaction {
       this.host.onSelection(); this.r.invalidate(false); return;
     }
     if (tool === 'eraser') {
-      this.gesture = { type: 'erase', last: world, radius: 10 / this.r.state.camera.zoom }; this.erase(world); return;
+      this.gesture = { type: 'erase', last: world }; this.erase(world); return;
     }
     if (tool === 'image') return;
     if (tool === 'text' || tool === 'note') {
-      const el = createElement(tool, { ...this.host.styles, x: world.x, y: world.y, w: tool === 'note' ? 230 : 320, h: tool === 'note' ? 200 : 45, ...(tool === 'note' ? { fontSize: 20 } : {}) });
+      const el = createElement(tool, { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, w: tool === 'note' ? 230 : 320, h: tool === 'note' ? 200 : 45, ...(tool === 'note' ? { fontSize: 20 } : {}) });
       this.editText(el, true); return;
     }
     const ink = tool === 'pen' || tool === 'recognize';
     const pressure = tool === 'pen' && this.host.styles.pressureEnabled !== false && (e.pointerType === 'pen' || e.pointerType === 'mouse');
     const sampler = pressure ? new PressureSampler(e.pointerType, { x: screen.x, y: screen.y, time: e.timeStamp, pressure: e.pressure }) : undefined;
-    const element = createElement(tool === 'recognize' ? 'pen' : tool, { ...this.host.styles, x: world.x, y: world.y, ...(ink ? { pressureEnabled: pressure } : {}), points: ink ? [{ x: 0, y: 0, pressure: sampler?.value ?? pressureValue(e.pressure) }] : [] });
+    const element = createElement(tool === 'recognize' ? 'pen' : tool, { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, ...(ink ? { pressureEnabled: pressure } : {}), points: ink ? [{ x: 0, y: 0, pressure: sampler?.value ?? pressureValue(e.pressure) }] : [] });
     this.r.state.selected.clear();
     this.gesture = { type: 'draw', start: world, element, recognize: tool === 'recognize', sampler, pointerId: e.pointerId };
     this.r.state.preview = [element]; this.r.invalidate(false);
@@ -268,7 +304,7 @@ export class Interaction {
     } else if (g.type === 'marquee') {
       const b = normalizeBounds({ ...g.start, w: world.x - g.start.x, h: world.y - g.start.y });
       this.r.state.marquee = b;
-      this.r.state.selected = new Set([...g.previous, ...this.r.scene.query(b).filter(el => containsBounds(b, elementBounds(el))).map(el => el.id)]);
+      this.r.state.selected = new Set([...g.previous, ...selectionUnits(this.r.scene.elements, this.r.state.groupScope ?? []).filter(unit => containsBounds(b, unit.bounds)).flatMap(unit => unit.elements.map(el => el.id))]);
     } else if (g.type === 'erase') { this.erase(world); return; }
     this.r.invalidate(false);
   }
@@ -295,10 +331,13 @@ export class Interaction {
         el = { ...el, ...geometry, x: origin.x + geometry.x, y: origin.y + geometry.y, points: [], radius: 0 };
       }
       if (el.kind === 'pen') {
-        el = { ...el, points: el.pressureEnabled ? simplifyInk(el.points, 0.35 / this.r.state.camera.zoom) : simplifyPoints(el.points, 0.35 / this.r.state.camera.zoom) };
+        // Translucent ink must keep the preview curve: simplifying it at release
+        // changes edge coverage and makes the color visibly jump.
+        if (el.opacity === 1) el = { ...el, points: el.pressureEnabled ? simplifyInk(el.points, 0.35 / this.r.state.camera.zoom) : simplifyPoints(el.points, 0.35 / this.r.state.camera.zoom) };
       } else if (Math.hypot(el.w, el.h) < 4 / this.r.state.camera.zoom) {
         el = { ...el, w: 160, h: isLinearElement(el) ? 0 : 100 };
       }
+      if (isLinearElement(el)) el = { ...el, rotationHandleSide: lineHandleSide(el) };
       this.r.scene.apply([{ id: el.id, after: el }], '绘制');
       // Creation tools are sticky. Selection is an explicit action (V/Esc).
       this.r.state.selected.clear();
@@ -309,7 +348,7 @@ export class Interaction {
       const sources = [...this.r.state.erasing.values()].map(el => {
         const original = this.r.scene.get(el.id)!;
         const count = original.erasures?.length ?? 0;
-        const erasures = el.erasures!.map((stroke, i) => i < count ? stroke : { ...stroke, points: simplifyPoints(stroke.points, g.radius * .02) });
+        const erasures = el.erasures!.map((stroke, i) => i < count ? stroke : { ...stroke, points: simplifyPoints(stroke.points, Math.min(stroke.radiusX, stroke.radiusY) * .02) });
         return { ...el, erasures };
       });
       const scene = this.r.scene;
@@ -330,10 +369,11 @@ export class Interaction {
     const gesture = this.gesture;
     if (gesture?.type !== 'erase') return;
     const previous = gesture.last;
+    const radius = eraserRadius(this.r.state.eraserSize, this.r.state.camera.zoom);
     const points = previous.x === point.x && previous.y === point.y ? [point] : [previous, point];
-    for (const el of this.r.scene.query(erasureBounds(points, gesture.radius))) {
+    for (const el of this.r.scene.query(erasureBounds(points, radius))) {
       const preview = this.r.state.erasing.get(el.id);
-      const next = eraseAt(preview ?? el, points, gesture.radius, !!preview);
+      const next = eraseAt(preview ?? el, points, radius, !!preview);
       if (next) this.r.state.erasing.set(el.id, next);
     }
     gesture.last = point;
@@ -342,6 +382,11 @@ export class Interaction {
 
   private wheel(e: WheelEvent): void {
     e.preventDefault();
+    if (this.r.state.tool === 'eraser' && e.deltaY && !e.ctrlKey && !e.metaKey && !this.space && (!this.gesture || this.gesture.type === 'erase')) {
+      this.r.state.cursor = this.point(e);
+      this.host.onEraserSize(wheelEraserSize(this.r.state.eraserSize, e.deltaY, e.deltaMode));
+      return;
+    }
     if (this.editing) this.finishEditing();
     if (e.ctrlKey || e.metaKey || !('ontouchstart' in window) && e.deltaMode === 1) {
       this.r.state.camera = zoomAt(this.r.state.camera, this.point(e), wheelZoom(this.r.state.camera.zoom, e.deltaY, e.deltaMode));
@@ -356,39 +401,46 @@ export class Interaction {
     if (this.r.state.tool !== 'select') return;
     const world = screenToWorld(this.point(e), this.r.state.camera);
     const el = this.hit(world);
+    if (el && this.enterGroup(el)) return;
     if (el && !el.locked && ['text', 'note', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) this.editText(el);
-    else if (!el) this.editText(createElement('text', { ...this.host.styles, x: world.x, y: world.y, w: 320, h: 45 }), true);
+    else if (!el) this.editText(createElement('text', { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, w: 320, h: 45 }), true);
   }
 
   editSelected(): void {
+    const units = selectedUnits(this.r.scene.elements, this.r.state.selected, this.r.state.groupScope ?? []);
+    if (units.length !== 1) return;
     const el = this.r.scene.get([...this.r.state.selected][0]);
+    if (el && this.enterGroup(el)) return;
     if (el && !el.locked && ['text', 'note', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) this.editText(el);
   }
 
   editText(el: BoardElement, fresh = false): void {
     this.finishEditing();
     this.editing = { el, fresh };
-    const b = normalizeBounds(el), padding = el.kind === 'text' ? 0 : el.kind === 'note' ? 22 : 16;
-    const p = { x: b.x + padding, y: b.y + padding };
-    const screen = { x: p.x * this.r.state.camera.zoom + this.r.state.camera.x, y: p.y * this.r.state.camera.zoom + this.r.state.camera.y };
     this.r.state.hidden.add(el.id);
     this.r.state.preview = el.kind === 'text' ? [] : [{ ...el, text: '' }];
     this.r.state.selected.clear();
     const editor = this.editor;
     editor.hidden = false; editor.value = el.text;
-    editor.style.left = `${screen.x}px`; editor.style.top = `${screen.y}px`;
-    editor.style.width = `${Math.max(100, b.w - padding * 2) * this.r.state.camera.zoom}px`;
-    editor.style.minHeight = `${el.fontSize * 1.6 * this.r.state.camera.zoom}px`;
-    editor.style.fontSize = `${el.fontSize * this.r.state.camera.zoom}px`;
+    editor.style.font = textFont(el);
     editor.style.color = el.stroke;
-    editor.style.fontWeight = el.kind === 'text' && el.fontSize >= 32 ? '600' : '400';
+    editor.style.opacity = `${el.opacity}`;
     this.sizeEditor(); this.r.invalidate();
-    editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length);
+    editor.focus({ preventScroll: true }); editor.setSelectionRange(editor.value.length, editor.value.length);
   }
 
   private sizeEditor(): void {
-    this.editor.style.height = 'auto';
-    this.editor.style.height = `${this.editor.scrollHeight + 4}px`;
+    if (!this.editing) return;
+    const { el } = this.editing, editor = this.editor, ctx = this.r.canvas.getContext('2d')!;
+    const layout = textLayout(ctx, el, editor.value), camera = this.r.state.camera;
+    const origin = rotatePoint({ x: layout.x, y: layout.y + editorTextOffset(ctx, el) }, rotationCenter(el), el.rotation ?? 0);
+    editor.style.left = `${origin.x * camera.zoom + camera.x}px`;
+    editor.style.top = `${origin.y * camera.zoom + camera.y}px`;
+    editor.style.transform = `rotate(${el.rotation ?? 0}rad) scale(${camera.zoom})`;
+    editor.style.width = `${layout.width}px`;
+    editor.style.lineHeight = `${layout.leading}px`;
+    editor.style.textAlign = layout.centered ? 'center' : 'left';
+    editor.style.height = `${layout.lines.length * layout.leading + 4}px`;
   }
 
   finishEditing(): void {
@@ -400,14 +452,19 @@ export class Interaction {
     if (text.trim() || !fresh) {
       if (text !== el.text || fresh) {
         const measure = this.r.canvas.getContext('2d')!;
-        measure.font = `${el.fontSize}px ${CANVAS_FONT}`;
-        const lines = wrapText(measure, text, Math.abs(el.w) - (el.kind === 'text' ? 0 : 44));
+        const { lines, leading, padding } = textLayout(measure, el, text);
         const next = { ...el, text };
         if (el.kind === 'text') {
-          next.h = Math.max(el.fontSize * 1.6, lines.length * el.fontSize * 1.55 + 4);
-          next.w = Math.max(24, ...lines.map(line => measure.measureText(line).width + 8));
+          next.h = Math.max(el.fontSize * 1.6, lines.length * leading + 4);
+          if (fresh) next.w = Math.max(24, ...lines.map(line => measure.measureText(line).width + 8));
         }
-        if (el.kind === 'note') next.h = Math.max(el.h, lines.length * el.fontSize * 1.55 + 44);
+        if (el.kind === 'note') next.h = Math.max(el.h, lines.length * leading + padding * 2);
+        if (el.rotation && (next.w !== el.w || next.h !== el.h)) {
+          const before = rotationCenter(el), after = rotationCenter(next);
+          const delta = { x: before.x - after.x, y: before.y - after.y };
+          const rotated = rotatePoint(delta, { x: 0, y: 0 }, el.rotation);
+          next.x += delta.x - rotated.x; next.y += delta.y - rotated.y;
+        }
         this.r.scene.apply([{ id: el.id, after: next }], '编辑文字');
       }
       this.r.state.selected = this.r.state.tool === 'select' ? new Set([el.id]) : new Set();

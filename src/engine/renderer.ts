@@ -5,6 +5,8 @@ import { drawElement, onImagesLoaded } from './draw';
 import { SelectionGlow } from './selection';
 import { isLinearElement, lineEndpointAt, lineEndpoints, lineRotationHandle } from '../core/linear';
 import { SELECTION_GAP, selectionFrame, objectRotationHandle, type CornerHandle } from '../core/selection-frame';
+import { inScope, selectedUnits } from '../core/groups';
+import { eraserRadius } from '../core/eraser';
 
 export type Handle = CornerHandle | 'start' | 'end' | 'rotate';
 export interface RenderState {
@@ -18,6 +20,8 @@ export interface RenderState {
   grid: boolean;
   dark: boolean;
   erasing: Map<string, BoardElement>;
+  eraserSize: number;
+  groupScope?: string[];
 }
 
 export class Renderer {
@@ -153,8 +157,9 @@ export class Renderer {
   }
 
   handleAt(point: Point): CornerHandle | null {
-    if (this.state.tool !== 'select' || !this.state.selected.size) return null;
+    if (this.state.tool !== 'select' || this.state.selected.size !== 1) return null;
     const selected = [...this.state.selected].map(id => this.scene.get(id));
+    if (selected[0]?.groupPath?.[this.state.groupScope?.length ?? 0]) return null;
     if (selected.some(el => el?.locked)) return null;
     const element = selected.length === 1 ? selected[0] : undefined;
     if (element && isLinearElement(element)) return null;
@@ -171,6 +176,7 @@ export class Renderer {
   endpointAt(point: Point): 'start' | 'end' | null {
     if (this.state.tool !== 'select' || this.state.selected.size !== 1) return null;
     const element = this.scene.get([...this.state.selected][0]);
+    if (element?.groupPath?.[this.state.groupScope?.length ?? 0]) return null;
     if (!element || element.locked || !isLinearElement(element)) return null;
     const world = screenToWorld(point, this.state.camera);
     return lineEndpointAt(element, world, 10 / this.state.camera.zoom);
@@ -179,6 +185,7 @@ export class Renderer {
   rotationHandleAt(point: Point): boolean {
     if (this.state.tool !== 'select' || this.state.selected.size !== 1) return false;
     const element = this.scene.get([...this.state.selected][0]);
+    if (element?.groupPath?.[this.state.groupScope?.length ?? 0]) return false;
     if (!element || element.locked) return false;
     const world = screenToWorld(point, this.state.camera);
     const handle = isLinearElement(element) ? lineRotationHandle(element, this.state.camera.zoom).handle : objectRotationHandle(element, this.state.camera.zoom).handle;
@@ -196,8 +203,13 @@ export class Renderer {
   private drawOverlay(): void {
     const ctx = this.overlay;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.interactionCanvas.width, this.interactionCanvas.height);
+    const layered = this.state.hidden.size || this.state.tool === 'select' && this.state.selected.size;
+    // Present translucent previews over an opaque copy of the cached scene.
+    // Independently presented canvases can otherwise briefly show both the old
+    // preview and the committed stroke, compositing the same ink twice.
+    if (!layered && this.state.preview.some(el => el.opacity < 1)) ctx.drawImage(this.canvas, 0, 0);
     this.transform(ctx);
-    if (this.state.hidden.size || this.state.tool === 'select' && this.state.selected.size) this.drawLayeredContent(ctx);
+    if (layered) this.drawLayeredContent(ctx);
     else for (const el of this.state.preview) drawElement(ctx, el, true, this.state.camera.zoom, this.state.dark);
     const b = this.selectionBounds();
     const zoom = this.state.camera.zoom;
@@ -207,7 +219,8 @@ export class Renderer {
       ctx.strokeStyle = this.state.dark ? '#8ebef0' : '#82ade1';
       ctx.fillStyle = this.state.dark ? '#223347' : '#f6faff'; ctx.lineWidth = 1 / zoom;
       const locked = [...this.state.selected].some(id => this.scene.get(id)?.locked);
-      const only = elements.length === 1 ? elements[0] : null;
+      const units = selectedUnits(elements, new Set(elements.map(el => el.id)), this.state.groupScope ?? []);
+      const only = elements.length === 1 && !units[0]?.group ? elements[0] : null;
       if (!locked && only && isLinearElement(only)) this.drawLinearHandles(ctx, only, zoom);
       else if (!only || !isLinearElement(only)) {
         if (!locked && only) this.drawRotationHandle(ctx, only, zoom, false);
@@ -218,14 +231,32 @@ export class Renderer {
           for (const p of [ne, se, sw]) ctx.lineTo(p.x, p.y);
           ctx.closePath(); ctx.stroke();
         } else {
-          const frame = expandBounds(b, SELECTION_GAP / zoom);
-          ctx.strokeRect(frame.x, frame.y, frame.w, frame.h);
+          for (const unit of units) {
+            if (!unit.group && unit.elements.length === 1) {
+              const { nw, ne, se, sw } = selectionFrame(unit.elements[0], zoom).corners;
+              ctx.beginPath(); ctx.moveTo(nw.x, nw.y);
+              for (const p of [ne, se, sw]) ctx.lineTo(p.x, p.y);
+              ctx.closePath(); ctx.stroke();
+            } else {
+              const frame = expandBounds(unit.bounds, SELECTION_GAP / zoom);
+              ctx.strokeRect(frame.x, frame.y, frame.w, frame.h);
+            }
+          }
         }
         ctx.restore();
       }
-      if (!locked && (!only || !isLinearElement(only))) for (const [, p] of only ? this.objectHandles(only) : this.handles(expandBounds(b, SELECTION_GAP / zoom))) {
+      if (!locked && only && !isLinearElement(only)) for (const [, p] of this.objectHandles(only)) {
         const size = 7 / zoom;
         ctx.beginPath(); ctx.roundRect(p.x - size / 2, p.y - size / 2, size, size, 1 / zoom); ctx.fill(); ctx.stroke();
+      }
+    }
+    if (this.state.groupScope?.length) {
+      const bounds = unionBounds(this.scene.elements.filter(el => inScope(el, this.state.groupScope!)));
+      if (bounds) {
+        const frame = expandBounds(bounds, 14 / zoom);
+        ctx.save(); ctx.strokeStyle = this.state.dark ? '#a4b2a5' : '#657460';
+        ctx.lineWidth = 1 / zoom; ctx.setLineDash([3 / zoom, 5 / zoom]);
+        ctx.strokeRect(frame.x, frame.y, frame.w, frame.h); ctx.restore();
       }
     }
     if (this.state.marquee) {
@@ -236,7 +267,7 @@ export class Renderer {
     if (this.state.tool === 'eraser' && this.state.cursor) {
       const p = screenToWorld(this.state.cursor, this.state.camera);
       ctx.strokeStyle = this.state.dark ? '#dbe6dc' : '#516b59'; ctx.fillStyle = '#9db4a223'; ctx.lineWidth = 1 / zoom;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 10 / zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, eraserRadius(this.state.eraserSize, zoom), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
   }
 

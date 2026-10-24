@@ -1,4 +1,4 @@
-import { COLORS, FILLS, createDocument, createElement, type BoardDocument, type BoardElement, type BoardMeta, type Tool } from './core/model';
+import { COLORS, FILLS, createDocument, createElement, isEmptyUntitled, type BoardDocument, type BoardElement, type BoardMeta, type Tool } from './core/model';
 import { validateDocument } from './core/codec';
 import { Scene } from './core/scene';
 import { hitTest, screenToWorld, unionBounds, zoomAt } from './core/geometry';
@@ -9,9 +9,10 @@ import { Writer, type SaveState } from './storage/writer';
 import { SnapshotCodec } from './storage/snapshot';
 import { Renderer, type RenderState } from './engine/renderer';
 import { Interaction, isTextInput } from './engine/interaction';
-import { downloadBlob, exportPNG, exportSVG, fileName, thumbnail } from './engine/export';
+import { downloadBlob, exportDimensions, exportPNG, exportSVG, fileName, thumbnail, type ExportOptions } from './engine/export';
 import { buildShell, swatches } from './ui/shell';
-import { TOOL_FAMILIES, ToolFamilyController, familyForTool } from './ui/tool-families';
+import { TOOL_FAMILIES, ToolFamilyController, familyForTool, hasFamilyOptions } from './ui/tool-families';
+import { bindFloatingBars, setRangeValue } from './ui/floating-bar';
 import { icon } from './ui/icons';
 import { CustomSelect } from './ui/custom-select';
 import { createDemo } from './demo';
@@ -25,9 +26,13 @@ import { bindTooltips } from './ui/tooltip';
 import { layerChanges, type LayerAction } from './core/layers';
 import { selectedFill, setFillColor, setFillEnabled } from './core/fill';
 import { PRODUCT, isBoardFile, isElementClipboard, readPreference, writePreference } from './core/product';
+import { SelectionToolbar } from './ui/selection-toolbar';
+import { alignmentChanges, cloneGroupPaths, groupChanges, inScope, selectedUnits, ungroupChanges, type Alignment } from './core/groups';
+import { DEFAULT_ERASER_SIZE, normalizeEraserSize } from './core/eraser';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
+const penStyle = (styles: Partial<BoardElement>): Partial<BoardElement> => ({ stroke: styles.stroke, strokeWidth: styles.strokeWidth, opacity: styles.opacity, dash: styles.dash, pressureEnabled: styles.pressureEnabled });
 
 export class App {
   private codec = new SnapshotCodec();
@@ -36,7 +41,14 @@ export class App {
   private scene = new Scene();
   renderer: Renderer;
   private interaction: Interaction;
+  private selectionToolbar: SelectionToolbar;
   private fontSize: CustomSelect;
+  private zoomLevel: CustomSelect;
+  private librarySort: CustomSelect<'updated' | 'title'>;
+  private exportScope: CustomSelect<'all' | 'selection'>;
+  private exportFormat: CustomSelect<'png' | 'svg'>;
+  private exportBackground: CustomSelect<'board' | 'transparent'>;
+  private exportScale: CustomSelect;
   private shortcuts = new ShortcutMap(readPreference('shortcuts'));
   private shortcutSettings: ShortcutSettings;
   private colorPickers: { stroke: ColorPicker; fill: ColorPicker };
@@ -48,7 +60,14 @@ export class App {
   private deleteId: string | null = null;
   private ready = false;
   private switching = false;
+  private libraryBoards: BoardMeta[] = [];
+  private exportingImage = false;
+  private libraryMutation: Promise<void> = Promise.resolve();
   private toolFamilies = new ToolFamilyController(tool => this.setTool(tool));
+  private familyTools = new Map<string, Tool>();
+  private penMode: 'pen' | 'highlighter' = readPreference('pen-mode') === 'highlighter' ? 'highlighter' : 'pen';
+  private ordinaryPenStyle: Partial<BoardElement> | null = null;
+  private highlighterStyle: Partial<BoardElement> = { stroke: '#f2d64b', strokeWidth: 20, opacity: .35, dash: false, pressureEnabled: false };
   private startup = performance.now();
   private startupPhases: Record<string, number> = {};
   private firstSceneFrameMs = 0;
@@ -58,18 +77,32 @@ export class App {
   constructor(root: HTMLElement) {
     if (readPreference('fill-enabled') === 'true') this.styles.fill = this.styles.fillColor;
     buildShell(root, this.palettes);
+    bindFloatingBars(root, $('.toolbar'));
+    const position = readPreference('toolbar-position') === 'top' ? 'top' : 'bottom';
+    document.documentElement.dataset.toolbarPosition = position;
     bindWorkspaceInput();
     bindTooltips();
-    this.fontSize = new CustomSelect($('#font-size'), [14, 18, 20, 24, 32, 40, 56, 72].map(value => ({ value, label: `${value} px` })), 24, value => this.changeStyle({ fontSize: value }));
-    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map() };
+    this.fontSize = new CustomSelect($('#font-size'), [14, 18, 20, 24, 32, 40, 56, 72].map(value => ({ value, label: `${value} px` })), 24, value => this.changeStyle({ fontSize: value }), { formatValue: value => `${Math.round(value)} px` });
+    this.zoomLevel = new CustomSelect($('#zoom-value'), [.25, .5, .75, 1, 1.25, 1.5, 2, 4].map(value => ({ value, label: formatZoom(value) })), 1, value => this.zoom(value), { placement: 'up', anchor: $('.zoom-steps'), showChevron: false, align: 'center', formatValue: formatZoom, customValues: false });
+    new CustomSelect<'top' | 'bottom'>($('#toolbar-position'), [{ value: 'bottom', label: '底部' }, { value: 'top', label: '顶部' }], position, value => {
+      document.documentElement.dataset.toolbarPosition = value; writePreference('toolbar-position', value);
+    });
+    this.librarySort = new CustomSelect<'updated' | 'title'>($('#library-sort'), [{ value: 'updated', label: '最近编辑' }, { value: 'title', label: '名称排序' }], 'updated', () => this.renderLibrary(this.libraryBoards));
+    this.exportScope = new CustomSelect<'all' | 'selection'>($('#export-scope'), [{ value: 'all', label: '整个画板' }, { value: 'selection', label: '已选对象' }], 'all', () => this.updateExportPreview());
+    this.exportFormat = new CustomSelect<'png' | 'svg'>($('#export-format'), [{ value: 'png', label: 'PNG 图片' }, { value: 'svg', label: 'SVG 矢量图' }], 'png', () => this.updateExportPreview());
+    this.exportBackground = new CustomSelect<'board' | 'transparent'>($('#export-background'), [{ value: 'board', label: '画板背景' }, { value: 'transparent', label: '透明背景' }], 'board', () => this.updateExportPreview());
+    this.exportScale = new CustomSelect($('#export-scale'), [1, 2, 3, 4].map(value => ({ value, label: `${value}×` })), 2, () => this.updateExportPreview());
+    const state: RenderState = { camera: { x: 0, y: 0, zoom: 1 }, selected: new Set(), preview: [], hidden: new Set(), marquee: null, cursor: null, tool: 'select', grid: true, dark: readPreference('theme') === 'dark', erasing: new Map(), eraserSize: normalizeEraserSize(Number(readPreference('eraser-size') ?? DEFAULT_ERASER_SIZE)) };
     document.documentElement.dataset.theme = state.dark ? 'dark' : 'light';
     this.renderer = new Renderer(this.scene, $('#canvas'), $('#interaction-canvas'), state);
+    this.selectionToolbar = new SelectionToolbar(this.renderer);
     this.renderer.onFrame = () => {
-      if (!this.ready) return;
+      this.selectionToolbar.update();
+      if (!this.ready || this.firstSceneFrameMs) return;
       this.firstSceneFrameMs = performance.now() - this.startup;
-      this.renderer.onFrame = undefined;
     };
     this.interaction = this.createInteraction();
+    this.setEraserSize(state.eraserSize);
     this.colorPickers = {
       stroke: new ColorPicker($('#stroke-palette'), this.palettes.stroke, 'stroke', stroke => this.changeStyle({ stroke }), { preview: (index, color) => this.updatePalette('stroke', index, color, false), change: (index, color) => this.updatePalette('stroke', index, color), reset: () => this.updatePalette('stroke') }),
       fill: new ColorPicker($('#fill-palette'), this.palettes.fill, 'fill', fill => this.changeFillColor(fill), { preview: (index, color) => this.updatePalette('fill', index, color, false), change: (index, color) => this.updatePalette('fill', index, color), reset: () => this.updatePalette('fill') }),
@@ -87,6 +120,7 @@ export class App {
     return new Interaction({
       renderer: this.renderer, styles: this.styles,
       onSelection: () => this.selectionChanged(), onCamera: () => this.cameraChanged(),
+      onEraserSize: size => this.setEraserSize(size),
       setTool: tool => this.setTool(tool), onContext: event => this.contextMenu(event),
     });
   }
@@ -127,7 +161,7 @@ export class App {
     doc.camera = { x: (width - 1440 * scale) / 2, y: (height - 960 * scale) / 2 + 10, zoom: scale };
   }
 
-  private loadDocument(doc: BoardDocument, persistent = true): void {
+  private loadDocument(doc: BoardDocument, persistent = true, stored = true): void {
     this.interaction.cancel(); this.interaction.finishEditing();
     this.writer?.stop(); this.unsubscribe();
     this.doc = doc;
@@ -135,10 +169,13 @@ export class App {
     this.renderer.scene = this.scene;
     this.renderer.state.camera = { ...doc.camera };
     this.renderer.state.selected.clear(); this.renderer.state.hidden.clear(); this.renderer.state.preview = [];
+    this.renderer.state.groupScope = [];
     this.writer = persistent ? new Writer(this.repo, () => this.document(), (state, error) => {
       this.saveState(state);
+      if (state === 'saved') writePreference('last-board', this.doc.id);
+      else if (state === 'draft' && readPreference('last-board') === this.doc.id) writePreference('last-board', '');
       if (error) this.toast(`保存暂未成功，点击左上角保存状态可重试。${message(error)}`, 5000);
-    }) : null;
+    }, stored) : null;
     this.unsubscribe = this.scene.subscribe(changes => {
       for (const id of this.renderer.state.selected) if (!this.scene.get(id)) this.renderer.state.selected.delete(id);
       this.writer?.enqueue(changes);
@@ -148,8 +185,11 @@ export class App {
     $('#board-title').setAttribute('value', doc.title);
     $<HTMLInputElement>('#board-title').value = doc.title;
     this.setTool('select');
-    writePreference('last-board', doc.id);
-    if (persistent) this.saveState('saved');
+    if (stored && persistent) writePreference('last-board', doc.id);
+    if (persistent) {
+      this.saveState(stored ? 'saved' : 'draft');
+      if (stored && isEmptyUntitled(doc)) this.writer?.enqueue([]);
+    }
     this.updateDocumentUI(); this.selectionChanged(); this.renderer.invalidate();
   }
 
@@ -162,6 +202,7 @@ export class App {
     if (!this.ready || this.switching) {
       this.toast('画板仍在打开或切换，请稍后再关闭'); return false;
     }
+    await this.libraryMutation;
     this.interaction.finishEditing(); this.interaction.cancel();
     await this.interaction.settle();
     const saved = this.writer ? await this.writer.flush() : true;
@@ -174,13 +215,13 @@ export class App {
     this.switching = true;
     this.interaction.finishEditing();
     try {
+      await this.libraryMutation;
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) { this.toast('请先重试保存，或导出当前画板备份'); return; }
       const doc = example ? createDemo() : createDocument();
       if (example) this.initialCamera(doc);
-      await this.repo.create(doc, thumbnail(doc.elements));
-      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc);
-      this.toast(example ? '这块画布，现在属于你了' : '一座新的墨屿，等你的好想法');
+      if (example) await this.repo.create(doc, thumbnail(doc.elements));
+      this.closeDialogs(); this.closeMenus(); this.loadDocument(doc, true, example);
     } catch (error) { this.toast(`新建失败：${message(error)}`); }
     finally { this.switching = false; }
   }
@@ -194,10 +235,12 @@ export class App {
     });
     document.addEventListener('click', event => {
       const target = event.target as HTMLElement;
+      const penMode = target.closest<HTMLElement>('[data-pen-mode]')?.dataset.penMode;
+      if (penMode === 'pen' || penMode === 'highlighter') { this.penMode = penMode; writePreference('pen-mode', penMode); this.setTool('pen'); return; }
       const familyElement = target.closest<HTMLElement>('[data-family]');
-      if (familyElement) { this.toggleToolFamily(familyElement.dataset.family!, familyElement); return; }
+      if (familyElement) { this.toggleToolFamily(familyElement.dataset.family!); return; }
       const childElement = target.closest<HTMLElement>('[data-tool-child]');
-      if (childElement) { this.toolFamilies.choose(childElement.dataset.toolChild as Tool); this.renderToolState(); return; }
+      if (childElement) { this.toolFamilies.choose(childElement.dataset.toolChild as Tool); return; }
       const tool = target.closest<HTMLElement>('[data-tool]')?.dataset.tool as Tool | undefined;
     if (tool) this.setTool(tool);
       const color = target.closest<HTMLElement>('[data-color-index]');
@@ -227,7 +270,7 @@ export class App {
     on('theme-button', () => this.toggleTheme()); on('help-button', () => this.shortcutSettings.open());
     on('undo-button', () => this.undo()); on('redo-button', () => this.redo());
     on('zoom-out', () => this.zoom(this.renderer.state.camera.zoom / 1.25)); on('zoom-in', () => this.zoom(this.renderer.state.camera.zoom * 1.25));
-    on('zoom-value', () => this.zoom(1)); on('fit-button', () => this.fit());
+    on('fit-button', () => this.fit());
     on('fill-toggle', () => this.toggleFill());
     on('pressure-toggle', () => {
       const pressure = $('#pressure-toggle').getAttribute('aria-checked') !== 'true';
@@ -237,15 +280,21 @@ export class App {
       this.selectionChanged();
     });
     on('collapse-properties', () => this.collapseProperties(true)); on('expand-properties', () => this.collapseProperties(false));
-    on('bring-front', () => this.reorder('front')); on('send-back', () => this.reorder('back'));
-    on('bring-forward', () => this.reorder('forward')); on('send-backward', () => this.reorder('backward'));
-    on('duplicate-button', () => this.duplicate()); on('delete-button', () => this.deleteSelection()); on('lock-button', () => this.toggleLock());
     on('save-status', () => { if (this.writer) void this.writer.flush(); });
     on('add-first-note', () => {
       const p = screenToWorld({ x: this.renderer.width / 2 - 80, y: this.renderer.height / 2 - 40 }, this.renderer.state.camera);
       this.interaction.editText(createElement('note', { ...this.styles, ...p, w: 230, h: 200, fontSize: 20 }), true);
     });
     on('library-import', () => $('#import-file').click());
+    on('workspace-settings-button', () => $<HTMLDialogElement>('#workspace-settings-dialog').showModal());
+    on('exit-group', () => this.interaction.exitGroup());
+    on('group-button', () => this.groupSelection()); on('ungroup-button', () => this.groupSelection(true));
+    document.querySelectorAll<HTMLElement>('[data-align]').forEach(button => button.addEventListener('click', () => {
+      this.scene.apply(alignmentChanges(this.scene.elements, this.renderer.state.selected, button.dataset.align as Alignment, this.renderer.state.groupScope ?? []), '对齐与分布'); this.selectionChanged();
+    }));
+    $('#library-search').addEventListener('input', () => this.renderLibrary(this.libraryBoards));
+    $('#export-options-form').addEventListener('input', () => this.updateExportPreview());
+    $('#export-options-form').addEventListener('submit', event => { event.preventDefault(); void this.confirmImageExport(); });
     on('cancel-delete', () => $<HTMLDialogElement>('#confirm-dialog').close());
     on('confirm-delete', () => { void this.confirmDelete(); });
     $<HTMLInputElement>('#board-title').addEventListener('change', () => {
@@ -256,6 +305,7 @@ export class App {
     $('#board-title').addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter') $('#board-title').blur(); });
     $('#opacity').addEventListener('input', () => { $('#opacity-value').textContent = `${$<HTMLInputElement>('#opacity').value}%`; });
     $('#opacity').addEventListener('change', () => this.changeStyle({ opacity: +$<HTMLInputElement>('#opacity').value / 100 }));
+    $('#eraser-size').addEventListener('input', () => this.setEraserSize($<HTMLInputElement>('#eraser-size').valueAsNumber));
     $<HTMLInputElement>('#import-file').addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) void this.importFile(input.files[0]); input.value = ''; });
     $<HTMLInputElement>('#image-file').addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) void this.addImage(input.files[0]); input.value = ''; });
     $('#workspace').addEventListener('dragover', event => { event.preventDefault(); });
@@ -265,7 +315,7 @@ export class App {
     });
     document.addEventListener('keydown', event => this.keydown(event), true);
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { this.toolFamilies.close(); this.closeToolMenus(); this.renderToolState(); }
+      if (event.key === 'Escape') { this.toolFamilies.close(); this.renderToolState(); }
     });
     document.addEventListener('copy', event => this.copy(event));
     document.addEventListener('cut', event => { if (this.copy(event)) this.deleteSelection(); });
@@ -277,27 +327,39 @@ export class App {
   setTool(tool: Tool): void {
     if (tool === 'image') { $('#image-file').click(); return; }
     this.interaction?.finishEditing();
+    this.syncPenProfile(tool === 'pen' && this.penMode === 'highlighter');
     this.renderer.state.tool = tool;
     if (tool !== 'select') this.renderer.state.selected.clear();
+    const family = familyForTool(tool);
+    if (family.children?.length) this.familyTools.set(family.id, tool);
+    if (hasFamilyOptions(family)) this.toolFamilies.open(family.id); else this.toolFamilies.close();
     this.renderToolState();
     this.interaction?.updateCursor(); this.renderer.invalidate(false); this.selectionChanged();
   }
 
-  private toggleToolFamily(id: string, button: HTMLElement): void {
-    const family = TOOL_FAMILIES.find(item => item.id === id)!;
-    if (!family.children?.length) { this.toolFamilies.close(); this.closeToolMenus(); this.setTool(id as Tool); return; }
-    this.toolFamilies.toggle(id);
-    this.closeToolMenus();
-    if (this.toolFamilies.isOpen(id) && family.children?.length) {
-      const menu = $(`#tool-menu-${id}`); menu.hidden = false;
-      button.setAttribute('aria-expanded', 'true');
-      menu.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+  private syncPenProfile(highlighter: boolean): void {
+    if (highlighter && !this.ordinaryPenStyle) {
+      this.ordinaryPenStyle = penStyle(this.styles); Object.assign(this.styles, this.highlighterStyle);
+    } else if (!highlighter && this.ordinaryPenStyle) {
+      this.highlighterStyle = penStyle(this.styles); Object.assign(this.styles, this.ordinaryPenStyle); this.ordinaryPenStyle = null;
     }
   }
 
-  private closeToolMenus(): void {
-    document.querySelectorAll<HTMLElement>('.tool-submenu').forEach(menu => { menu.hidden = true; });
-    document.querySelectorAll<HTMLElement>('[data-family]').forEach(item => item.setAttribute('aria-expanded', 'false'));
+  private setEraserSize(value: number): void {
+    const size = this.interaction.setEraserSize(value);
+    setRangeValue($('#eraser-size'), size);
+    writePreference('eraser-size', String(size));
+  }
+
+  private toggleToolFamily(id: string): void {
+    const family = TOOL_FAMILIES.find(item => item.id === id)!;
+    if (!hasFamilyOptions(family)) { this.setTool(id as Tool); return; }
+    if (familyForTool(this.renderer.state.tool).id !== id) {
+      this.setTool(this.familyTools.get(id) ?? (id === 'shapes' ? 'rect' : family.children?.[0].tool ?? id as Tool)); return;
+    }
+    this.toolFamilies.toggle(id);
+    this.renderToolMenus();
+    if (this.toolFamilies.isOpen(id)) document.querySelector<HTMLElement>(`[data-tool-menu="${id}"] [aria-selected="true"]`)?.focus();
   }
 
   private renderToolState(): void {
@@ -310,24 +372,49 @@ export class App {
       const active = item.dataset.toolChild === this.renderer.state.tool;
       item.classList.toggle('active', active); item.setAttribute('aria-selected', String(active));
     });
+    this.renderToolMenus();
+  }
+
+  private renderToolMenus(): void {
+    const elements = this.selected();
+    const inkSelected = elements.length > 0 && elements.every(el => el.kind === 'pen' || el.path?.strokes.some(stroke => stroke.pressureEnabled !== undefined));
+    const family = TOOL_FAMILIES.find(family => hasFamilyOptions(family) && this.toolFamilies.isOpen(family.id))?.id ?? (inkSelected ? 'pen' : null);
+    document.querySelectorAll<HTMLElement>('[data-tool-menu]').forEach(menu => { menu.hidden = menu.dataset.toolMenu !== family; });
+    document.querySelectorAll<HTMLElement>('[data-family]').forEach(button => button.setAttribute('aria-expanded', String(button.dataset.family === family)));
+    document.querySelectorAll<HTMLElement>('[data-pen-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.penMode === this.penMode)));
   }
 
   private selected(): BoardElement[] { return [...this.renderer.state.selected].map(id => this.scene.get(id)).filter((el): el is BoardElement => !!el); }
 
+  private movableSelection(): BoardElement[] {
+    return selectedUnits(this.scene.elements, this.renderer.state.selected, this.renderer.state.groupScope ?? []).filter(unit => !unit.elements.some(el => el.locked)).flatMap(unit => unit.elements);
+  }
+
   private selectionChanged(): void {
+    const scope = this.renderer.state.groupScope ?? [];
+    while (scope.length && !this.scene.elements.some(el => inScope(el, scope))) scope.pop();
+    this.renderer.state.groupScope = scope;
+    const units = selectedUnits(this.scene.elements, this.renderer.state.selected, scope);
+    this.renderer.state.selected = new Set(units.flatMap(unit => unit.elements.map(el => el.id)));
     const elements = this.selected();
     const first = elements[0];
-    $('#selection-actions').hidden = !elements.length;
+    $('#selection-status').hidden = !elements.length;
     $('#selection-label').textContent = `已选择 ${elements.length} 个元素`;
-    $('#property-title').textContent = elements.length ? '元素样式' : '画笔与样式';
+    if (units.some(unit => unit.group)) $('#selection-label').textContent = `已选择 ${units.length} 个对象 · ${elements.length} 个元素`;
+    $<HTMLButtonElement>('#group-button').disabled = units.length < 2 || elements.some(el => el.locked || (el.groupPath?.length ?? 0) >= 32);
+    $<HTMLButtonElement>('#ungroup-button').disabled = !units.some(unit => unit.group && !unit.elements.some(el => el.locked));
+    for (const id of ['group-button', 'ungroup-button']) $(`#${id}`).hidden = $<HTMLButtonElement>(`#${id}`).disabled;
+    $('#alignment-trigger').hidden = units.filter(unit => !unit.elements.some(el => el.locked)).length < 2;
+    document.querySelectorAll<HTMLButtonElement>('[data-align]').forEach(button => { button.disabled = units.filter(unit => !unit.elements.some(el => el.locked)).length < (['horizontal', 'vertical'].includes(button.dataset.align!) ? 3 : 2); });
+    $('#group-navigation').hidden = !scope.length;
+    $('#group-scope-label').textContent = `组合内 · 第 ${scope.length} 层`;
     const style = first ?? this.styles;
     const fillColor = selectedFill(style, selectedFill(this.styles));
     $('#fill-toggle').setAttribute('aria-checked', String(elements.length ? elements.every(el => el.fill !== 'transparent') : this.styles.fill !== 'transparent'));
     $<HTMLButtonElement>('#fill-toggle').disabled = !!elements.length && elements.every(el => el.locked);
-    const isInk = (el: BoardElement): boolean => el.kind === 'pen' || !!el.path?.strokes.some(stroke => stroke.pressureEnabled !== undefined);
-    $('#pressure-setting').hidden = elements.length ? !elements.every(isInk) : this.renderer.state.tool !== 'pen';
+    this.renderToolMenus();
     $('#pressure-toggle').setAttribute('aria-checked', String(first ? !!first.pressureEnabled : this.styles.pressureEnabled !== false));
-    $<HTMLButtonElement>('#pressure-toggle').disabled = !!elements.length && elements.every(el => el.locked);
+    $<HTMLButtonElement>('#pressure-toggle').disabled = (!!elements.length && elements.every(el => el.locked)) || (this.renderer.state.tool === 'pen' && this.penMode === 'highlighter');
     document.querySelectorAll<HTMLElement>('[data-color-index]').forEach(button => {
       const active = button.dataset.color === (button.dataset.property === 'fill' ? fillColor : style.stroke); button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
     });
@@ -339,8 +426,6 @@ export class App {
     $('#opacity-value').textContent = `${Math.round((style.opacity ?? 1) * 100)}%`;
     const size = style.fontSize ?? 24;
     this.fontSize.setValue(size);
-    $('#lock-button').innerHTML = icon(first?.locked ? 'unlock' : 'lock');
-    for (const id of ['bring-front', 'send-back', 'bring-forward', 'send-backward']) $<HTMLButtonElement>(`#${id}`).disabled = !elements.some(el => !el.locked);
     this.renderer.invalidate(false); this.updateHistory();
   }
 
@@ -411,11 +496,11 @@ export class App {
 
   private saveState(state: SaveState): void {
     const el = $('#save-status'); el.dataset.state = state;
-    el.lastElementChild!.textContent = state === 'saved' ? '已保存在本机' : state === 'saving' ? '正在保存…' : '保存未成功 · 点击重试';
+    el.lastElementChild!.textContent = state === 'draft' ? '空白画板' : state === 'saved' ? '已保存在本机' : state === 'saving' ? '正在保存…' : '保存未成功 · 点击重试';
   }
 
   private cameraChanged(persist = true): void {
-    $('#zoom-value').textContent = formatZoom(this.renderer.state.camera.zoom);
+    this.zoomLevel.setValue(this.renderer.state.camera.zoom);
     if (persist && this.ready) this.writer?.enqueue([], { camera: { ...this.renderer.state.camera } }, 650);
   }
 
@@ -439,7 +524,7 @@ export class App {
   private undo(): void { this.interaction.finishEditing(); this.interaction.cancel(); this.scene.undo(); this.selectionChanged(); }
   private redo(): void { this.interaction.finishEditing(); this.interaction.cancel(); this.scene.redo(); this.selectionChanged(); }
   private deleteSelection(): void {
-    const elements = this.selected().filter(el => !el.locked);
+    const elements = this.movableSelection();
     if (!elements.length) return;
     this.scene.apply(elements.map(el => ({ id: el.id, after: null })), '删除');
     this.selectionChanged();
@@ -447,20 +532,29 @@ export class App {
 
   private duplicate(): void { this.insertElements(this.selected()); }
 
+  private groupSelection(ungroup = false): void {
+    this.interaction.finishEditing(); this.interaction.cancel();
+    const changes = (ungroup ? ungroupChanges : groupChanges)(this.scene.elements, this.renderer.state.selected, this.renderer.state.groupScope ?? []);
+    this.scene.apply(changes, ungroup ? '取消组合' : '组合'); this.selectionChanged();
+    if (changes.length) this.toast(ungroup ? '已解开一层组合' : '已组合 · 双击进入，Esc 退出；Ctrl + 单击直接选择内部对象');
+  }
+
   private insertElements(elements: BoardElement[], center = false): void {
     if (!elements.length) return;
+    const depth = this.renderer.state.groupScope?.length ?? 0;
+    if (elements.some(el => (el.groupPath?.length ?? 0) - (center ? 0 : depth) + depth > 32)) { this.toast('组合层数已达上限，请先解开一层再粘贴'); return; }
     const b = unionBounds(elements)!;
     const cameraCenter = screenToWorld({ x: this.renderer.width / 2, y: this.renderer.height / 2 }, this.renderer.state.camera);
     const dx = center ? cameraCenter.x - b.x - b.w / 2 : 24;
     const dy = center ? cameraCenter.y - b.y - b.h / 2 : 24;
     const order = this.scene.elements.at(-1)?.order ?? 0;
-    const copies = elements.map((el, i) => ({ ...el, id: crypto.randomUUID(), x: el.x + dx, y: el.y + dy, order: order + i + 1, locked: false }));
+    const copies = cloneGroupPaths(elements, this.renderer.state.groupScope ?? [], center ? 0 : this.renderer.state.groupScope?.length ?? 0).map((el, i) => ({ ...el, id: crypto.randomUUID(), x: el.x + dx, y: el.y + dy, order: order + i + 1, locked: false }));
     this.scene.apply(copies.map(el => ({ id: el.id, after: el })), '粘贴');
     this.setTool('select'); this.renderer.state.selected = new Set(copies.map(el => el.id)); this.selectionChanged();
   }
 
   private reorder(direction: LayerAction): void {
-    const changes = layerChanges(this.scene.elements, this.renderer.state.selected, direction);
+    const changes = layerChanges(this.scene.elements, this.renderer.state.selected, direction, this.renderer.state.groupScope ?? []);
     this.scene.apply(changes, direction === 'front' ? '置顶' : direction === 'back' ? '置底' : direction === 'forward' ? '上移一层' : '下移一层');
   }
 
@@ -478,7 +572,7 @@ export class App {
       return;
     }
     if (target?.closest('[role="combobox"], [role="listbox"]')) return;
-    if (e.key === 'Escape') { this.renderer.state.selected.clear(); this.closeMenus(); this.setTool('select'); return; }
+    if (e.key === 'Escape') { if (this.interaction.exitGroup()) { e.preventDefault(); return; } this.renderer.state.selected.clear(); this.closeMenus(); this.setTool('select'); return; }
     if ((e.key === 'Enter' || e.key === ' ') && target?.closest('button')) return;
     let action = this.shortcuts.action(e);
     const accelerated = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.startsWith('Arrow');
@@ -491,6 +585,7 @@ export class App {
   }
 
   private runShortcut(action: string, amount = 1): void {
+    if (action.startsWith('family:')) { this.toggleToolFamily(action.slice(7)); return; }
     if (action.startsWith('tool:')) { this.setTool(action.slice(5) as Tool); return; }
     if (action === 'color-next' || action === 'color-previous') {
       const style = this.selected()[0] ?? this.styles;
@@ -499,11 +594,12 @@ export class App {
     if (action.startsWith('move-')) {
       const dx = action === 'move-right' ? amount : action === 'move-left' ? -amount : 0;
       const dy = action === 'move-down' ? amount : action === 'move-up' ? -amount : 0;
-      this.scene.apply(this.selected().filter(el => !el.locked).map(el => ({ id: el.id, after: { ...el, x: el.x + dx, y: el.y + dy } })), '微调'); this.selectionChanged(); return;
+      this.scene.apply(this.movableSelection().map(el => ({ id: el.id, after: { ...el, x: el.x + dx, y: el.y + dy } })), '微调'); this.selectionChanged(); return;
     }
     const actions: Record<string, () => void> = {
       undo: () => this.undo(), redo: () => this.redo(), duplicate: () => this.duplicate(), delete: () => this.deleteSelection(), edit: () => this.interaction.editSelected(),
-      'select-all': () => { this.setTool('select'); this.renderer.state.selected = new Set(this.scene.elements.map(el => el.id)); this.selectionChanged(); },
+      'select-all': () => { this.setTool('select'); this.renderer.state.selected = new Set(this.scene.elements.filter(el => inScope(el, this.renderer.state.groupScope ?? [])).map(el => el.id)); this.selectionChanged(); },
+      group: () => this.groupSelection(), ungroup: () => this.groupSelection(true),
       'new-board': () => { void this.newBoard(); }, export: () => { void this.export('file'); },
       'zoom-in': () => this.zoom(this.renderer.state.camera.zoom * 1.25), 'zoom-out': () => this.zoom(this.renderer.state.camera.zoom / 1.25), 'zoom-reset': () => this.zoom(1),
       fit: () => this.fit(), grid: () => this.perform('grid'), help: () => this.shortcutSettings.open(), 'send-back': () => this.reorder('back'), 'bring-front': () => this.reorder('front'), 'send-backward': () => this.reorder('backward'), 'bring-forward': () => this.reorder('forward'),
@@ -514,7 +610,7 @@ export class App {
   private updateShortcutLabels(): void {
     for (const family of TOOL_FAMILIES) {
       const button = document.querySelector<HTMLElement>(`[data-family="${family.id}"]`);
-      const key = this.shortcuts.get(`tool:${family.id}`), label = key ? shortcutLabel(key) : '';
+      const key = this.shortcuts.get(`${family.children?.length ? 'family' : 'tool'}:${family.id}`), label = key ? shortcutLabel(key) : '';
       if (button) { button.dataset.tooltip = `${family.label}${label ? `  ${label}` : ''}${family.id === 'hand' ? ' · 空格 + 拖动临时平移 · Ctrl + 滚轮缩放' : ''}`; const hint = button.querySelector('.tool-key'); if (hint) hint.textContent = label; }
       for (const child of family.children ?? []) {
         const item = document.querySelector<HTMLElement>(`[data-tool-child="${child.tool}"]`);
@@ -524,16 +620,16 @@ export class App {
         let hint = item.querySelector('kbd'); if (!hint) { hint = document.createElement('kbd'); item.append(hint); } hint.textContent = label;
       }
     }
-    const hints: Record<string, string> = { new: 'new-board', duplicate: 'duplicate', forward: 'bring-forward', backward: 'send-backward', front: 'bring-front', back: 'send-back', delete: 'delete', edit: 'edit', grid: 'grid', help: 'help' };
+    const hints: Record<string, string> = { new: 'new-board', duplicate: 'duplicate', forward: 'bring-forward', backward: 'send-backward', front: 'bring-front', back: 'send-back', delete: 'delete', edit: 'edit', grid: 'grid', help: 'help', group: 'group', ungroup: 'ungroup' };
     for (const [action, id] of Object.entries(hints)) document.querySelectorAll<HTMLElement>(`[data-action="${action}"] > kbd`).forEach(el => { el.textContent = this.shortcuts.get(id) ? shortcutLabel(this.shortcuts.get(id)) : ''; });
-    for (const [id, label] of [['bring-forward', '上移一层'], ['send-backward', '下移一层'], ['bring-front', '置于顶层'], ['send-back', '置于底层']]) {
-      const chord = this.shortcuts.get(id); $(`#${id}`).dataset.tooltip = `${label}${chord ? `  ${shortcutLabel(chord)}` : ''}`;
+    for (const [id, label, action] of [['group-button', '组合', 'group'], ['ungroup-button', '取消组合', 'ungroup']]) {
+      const chord = this.shortcuts.get(action); $(`#${id}`).dataset.tooltip = `${label}${chord ? `  ${shortcutLabel(chord)}` : ''}`;
     }
   }
 
   private copy(event: ClipboardEvent): boolean {
     if (isTextInput(event.target) || document.querySelector('dialog[open]')) return false;
-    const elements = this.selected();
+    const elements = this.selected().map(el => ({ ...el, groupPath: el.groupPath?.slice(this.renderer.state.groupScope?.length ?? 0) }));
     if (!elements.length) {
       event.preventDefault(); window.getSelection()?.removeAllRanges();
       return false;
@@ -559,24 +655,62 @@ export class App {
       }
     } catch { /* Ordinary text is pasted as a text element. */ }
     const point = screenToWorld({ x: this.renderer.width / 2 - 150, y: this.renderer.height / 2 }, this.renderer.state.camera);
-    this.interaction.editText(createElement('text', { ...this.styles, ...point, text: text.slice(0, 100000), w: 400, h: 60 }), true);
+    this.interaction.editText(createElement('text', { ...this.styles, ...point, groupPath: this.renderer.state.groupScope?.slice(), text: text.slice(0, 100000), w: 400, h: 60 }), true);
     this.interaction.finishEditing();
   }
 
-  private async export(format: 'file' | 'png' | 'svg'): Promise<void> {
+  private async export(format: 'file' | 'png' | 'svg', configured = false): Promise<void> {
+    if (format !== 'file' && !configured) {
+      this.interaction.finishEditing();
+      this.exportFormat.setValue(format);
+      this.exportScope.setValue(this.selected().length ? 'selection' : 'all');
+      this.exportScope.setOptionDisabled('selection', !this.selected().length);
+      this.updateExportPreview(); $<HTMLDialogElement>('#export-options-dialog').showModal(); return;
+    }
+    const exportOptions = configured ? this.imageExportOptions() : {};
     this.interaction.finishEditing();
     await this.interaction.settle();
     const doc = this.document();
-    const elements = this.selected().length ? this.selected() : doc.elements;
+    const selectionOnly = configured && this.exportScope.value === 'selection';
+    const elements = selectionOnly ? this.selected() : doc.elements;
     try {
       if (format === 'file') {
         downloadBlob(new Blob([await this.codec.encode(doc)], { type: 'application/octet-stream' }), `${fileName(doc.title)}${PRODUCT.extension}`);
         void this.writer?.flush(); this.toast('源文件已导出，随时可以重新打开');
       } else {
-        const blob = format === 'png' ? await exportPNG(doc, elements) : exportSVG(doc, elements);
-        downloadBlob(blob, `${fileName(doc.title)}.${format}`); this.toast(`${format.toUpperCase()} 已导出${this.selected().length ? ' · 仅选中内容' : ''}`);
+        const blob = format === 'png' ? await exportPNG(doc, elements, exportOptions) : exportSVG(doc, elements, exportOptions);
+        downloadBlob(blob, `${fileName(doc.title)}.${format}`); this.toast(`${format.toUpperCase()} 已导出${selectionOnly ? ' · 仅选中内容' : ''}`);
+        $<HTMLDialogElement>('#export-options-dialog').close();
       }
     } catch (error) { this.toast(message(error)); }
+  }
+
+  private imageExportOptions(): ExportOptions {
+    return { padding: $<HTMLInputElement>('#export-padding').valueAsNumber, transparent: this.exportBackground.value === 'transparent', scale: this.exportScale.value };
+  }
+
+  private updateExportPreview(): void {
+    const elements = this.exportScope.value === 'selection' ? this.selected() : this.scene.elements;
+    const bounds = unionBounds(elements), format = this.exportFormat.value;
+    $('#export-summary').textContent = `整个画板 ${this.scene.size} 个元素 · 已选 ${this.selected().length} 个元素`;
+    this.exportScale.setDisabled(format === 'svg');
+    $('#confirm-export').textContent = `导出 ${format.toUpperCase()}`;
+    try {
+      if (!bounds) throw new Error('当前范围没有内容，请选择其他范围或先画点什么。');
+      const size = exportDimensions(bounds, this.imageExportOptions());
+      $('#export-dimensions').textContent = format === 'svg' ? `${elements.length} 个元素 · 矢量图可无损缩放` : `${size.width} × ${size.height} px · ${elements.length} 个元素${size.scale < this.exportScale.value ? ' · 已按大图上限调整倍率' : ''}`;
+      $<HTMLButtonElement>('#confirm-export').disabled = this.exportingImage;
+    } catch (error) { $('#export-dimensions').textContent = message(error); $<HTMLButtonElement>('#confirm-export').disabled = true; }
+  }
+
+  private async confirmImageExport(): Promise<void> {
+    const button = $<HTMLButtonElement>('#confirm-export'); if (button.disabled) return;
+    if (this.exportingImage) return;
+    this.exportingImage = true;
+    button.disabled = true;
+    const format = this.exportFormat.value;
+    try { await this.export(format, true); }
+    finally { this.exportingImage = false; this.updateExportPreview(); }
   }
 
   private async importFile(file: File): Promise<void> {
@@ -587,13 +721,15 @@ export class App {
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) throw new Error('请先保存或导出当前画板');
       doc.id = crypto.randomUUID(); doc.created = doc.updated = Date.now();
-      await this.repo.create(doc, thumbnail(doc.elements));
-      this.closeDialogs(); this.loadDocument(doc); this.toast('画板已导入');
+      const stored = !isEmptyUntitled(doc);
+      if (stored) await this.repo.create(doc, thumbnail(doc.elements));
+      this.closeDialogs(); this.loadDocument(doc, true, stored); this.toast('画板已导入');
     } catch (error) { this.toast(`导入失败：${message(error)}`, 5000); }
   }
 
   private async addImage(file: File, screen = { x: this.renderer.width / 2, y: this.renderer.height / 2 }): Promise<void> {
     const scene = this.scene;
+    let groupPath = this.renderer.state.groupScope?.slice();
     const point = screenToWorld(screen, this.renderer.state.camera);
     try {
       if (file.size > 15 * 1024 * 1024) throw new Error('请选择 15 MB 以内的图片');
@@ -602,9 +738,15 @@ export class App {
       const image = new Image(); image.src = src; await image.decode();
       // Reloading the same board also replaces its scene and invalidates this import.
       if (this.scene !== scene) { this.toast('画板已切换，请重新插入图片'); return; }
+      if (groupPath?.length) {
+        const group = groupPath.at(-1)!;
+        const member = scene.elements.find(el => el.groupPath?.includes(group));
+        if (!member) { this.toast('组合已变化，请重新插入图片'); return; }
+        groupPath = member.groupPath!.slice(0, member.groupPath!.indexOf(group) + 1);
+      }
       const scale = Math.min(1, 600 / image.naturalWidth, 500 / image.naturalHeight);
       const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
-      const el = createElement('image', { x: point.x - w / 2, y: point.y - h / 2, w, h, src, strokeWidth: 0, radius: 8 });
+      const el = createElement('image', { x: point.x - w / 2, y: point.y - h / 2, w, h, src, strokeWidth: 0, radius: 8, groupPath });
       scene.apply([{ id: el.id, after: el }], '插入图片');
       this.renderer.state.selected.clear(); this.selectionChanged();
     } catch (error) { this.toast(message(error)); }
@@ -617,7 +759,7 @@ export class App {
     this.updateThemeIcon(); this.renderer.invalidate();
   }
   private updateThemeIcon(): void { $('#theme-button').innerHTML = icon(this.renderer.state.dark ? 'sun' : 'moon'); }
-  private collapseProperties(collapsed: boolean): void { $('#properties').hidden = collapsed; $('#expand-properties').hidden = !collapsed; }
+  private collapseProperties(collapsed: boolean): void { $('#properties').hidden = collapsed; $('#expand-properties').hidden = !collapsed; this.selectionToolbar.update(); }
 
   private closeMenus(): void { document.querySelectorAll<HTMLElement>('.menu').forEach(menu => { menu.hidden = true; }); }
   private toggleMenu(id: string, anchor: HTMLElement, right = false): void {
@@ -626,14 +768,20 @@ export class App {
     const b = anchor.getBoundingClientRect();
     menu.hidden = false; menu.style.top = `${b.bottom + 9}px`;
     menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, right ? b.right - menu.offsetWidth : b.left))}px`;
-    if (id === 'export-menu') $('#export-button').dataset.tooltip = this.selected().length ? `PNG / SVG 仅导出选中的 ${this.selected().length} 个元素` : '导出当前画板，所有数据保存在本机';
+    if (id === 'export-menu') $('#export-button').dataset.tooltip = this.selected().length ? `导出时可选择整个画板或已选的 ${this.selected().length} 个元素` : '导出当前画板，所有数据保存在本机';
   }
 
   private contextMenu(event: MouseEvent): void {
     this.closeMenus();
     const point = screenToWorld({ x: event.clientX, y: event.clientY }, this.renderer.state.camera);
     const hit = this.scene.query({ x: point.x - 5, y: point.y - 5, w: 10, h: 10 }).reverse().find(el => hitTest(el, point, 5));
-    if (hit && !this.renderer.state.selected.has(hit.id)) { this.setTool('select'); this.renderer.state.selected = new Set([hit.id]); this.selectionChanged(); }
+    if (hit && !this.renderer.state.selected.has(hit.id)) { this.setTool('select'); this.interaction.selectElement(hit); }
+    const units = selectedUnits(this.scene.elements, this.renderer.state.selected, this.renderer.state.groupScope ?? []);
+    for (const action of ['forward', 'backward', 'front', 'back', 'delete']) {
+      $<HTMLButtonElement>(`#context-menu [data-action="${action}"]`).disabled = !this.movableSelection().length;
+    }
+    $<HTMLButtonElement>('#context-menu [data-action="group"]').disabled = units.length < 2 || this.selected().some(el => el.locked);
+    $<HTMLButtonElement>('#context-menu [data-action="ungroup"]').disabled = !units.some(unit => unit.group && !unit.elements.some(el => el.locked));
     const menu = $('#context-menu'); menu.hidden = false;
     menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - 255))}px`;
     menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 10))}px`;
@@ -642,6 +790,8 @@ export class App {
   private perform(action: string): void {
     const actions: Record<string, () => void> = {
       new: () => { void this.newBoard(); }, library: () => { void this.showLibrary(); }, import: () => $('#import-file').click(),
+      'workspace-settings': () => $<HTMLDialogElement>('#workspace-settings-dialog').showModal(),
+      group: () => this.groupSelection(), ungroup: () => this.groupSelection(true),
       grid: () => { this.renderer.state.grid = !this.renderer.state.grid; this.renderer.invalidate(); },
       help: () => this.shortcutSettings.open(),
       'export-file': () => { void this.export('file'); }, 'export-png': () => { void this.export('png'); }, 'export-svg': () => { void this.export('svg'); },
@@ -661,16 +811,21 @@ export class App {
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) { this.toast('当前画板尚未保存成功，请先重试'); return; }
       // A thumbnail is only rendered when opening the library, never during drawing.
-      if (this.writer) await this.repo.compact(this.document(), thumbnail(this.scene.elements));
+      if (this.writer?.stored) await this.repo.compact(this.document(), thumbnail(this.scene.elements));
       const boards = await this.repo.list();
       this.renderLibrary(boards);
     } catch (error) { this.toast(`无法读取画板：${message(error)}`); }
   }
 
   private renderLibrary(boards: BoardMeta[]): void {
-    $('#board-count').textContent = `${boards.length} 块画板`;
+    this.libraryBoards = boards;
+    const query = $<HTMLInputElement>('#library-search').value.trim().toLocaleLowerCase();
+    const visible = boards.filter(board => board.title.toLocaleLowerCase().includes(query));
+    if (this.librarySort.value === 'title') visible.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN', { numeric: true }));
+    $('#board-count').textContent = query ? `${visible.length} / ${boards.length} 块画板` : `${boards.length} 块画板`;
     const list = $('#board-list'); list.replaceChildren();
-    for (const board of boards) {
+    if (!visible.length) { const empty = document.createElement('p'); empty.className = 'library-empty'; empty.textContent = query ? '没有找到匹配的画板，试试其他名称。' : '还没有画板，创建一块开始记录。'; list.append(empty); }
+    for (const board of visible) {
       const card = document.createElement('div'); card.className = 'board-card';
       const preview = document.createElement('button'); preview.className = 'board-preview'; preview.setAttribute('aria-label', `打开画板 ${board.title}`);
       if (board.thumbnail) { const image = document.createElement('img'); image.src = board.thumbnail; image.alt = ''; preview.append(image); }
@@ -679,28 +834,67 @@ export class App {
       card.append(preview);
       if (board.id === this.doc.id) { const label = document.createElement('span'); label.className = 'current-label'; label.textContent = '当前画板'; card.append(label); }
       const info = document.createElement('div'); info.className = 'board-card-info';
-      const title = document.createElement('div'); title.className = 'board-card-title'; title.textContent = board.title;
+      const title = document.createElement('input'); title.className = 'board-card-title'; title.value = board.title; title.maxLength = 100; title.setAttribute('aria-label', `画板名称 ${board.title}`);
+      title.addEventListener('change', () => { const value = title.value; this.libraryMutation = this.libraryMutation.then(() => this.renameBoard(board.id, value)); });
+      title.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); title.value = board.title; title.blur(); } if (event.key === 'Enter') title.blur(); });
       const time = document.createElement('span'); time.textContent = `${board.elementCount} 个元素 · ${new Date(board.updated).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}`;
       info.append(title, time); card.append(info);
+      const copy = document.createElement('button'); copy.className = 'icon-button board-copy'; copy.setAttribute('aria-label', `复制画板 ${board.title}`); copy.innerHTML = icon('duplicate', 15);
+      copy.addEventListener('click', () => { copy.disabled = true; this.libraryMutation = this.libraryMutation.then(() => this.duplicateBoard(board.id)).finally(() => { copy.disabled = false; }); });
       const remove = document.createElement('button'); remove.className = 'icon-button'; remove.setAttribute('aria-label', `删除画板 ${board.title}`); remove.innerHTML = icon('trash', 15);
       remove.addEventListener('click', () => { this.deleteId = board.id; $<HTMLDialogElement>('#confirm-dialog').showModal(); });
-      card.append(remove); list.append(card);
+      card.append(copy, remove); list.append(card);
     }
   }
 
-  private async openBoard(id: string): Promise<void> {
-    if (id === this.doc.id) { this.closeDialogs(); return; }
+  private async renameBoard(id: string, value: string): Promise<void> {
+    const title = value.trim() || '未命名画板';
     try {
+      if (id === this.doc.id) {
+        this.doc.title = title; $<HTMLInputElement>('#board-title').value = title; document.title = `${title} — ${PRODUCT.name}`;
+        this.writer?.enqueue([], { title });
+        if (this.writer && !await this.writer.flush()) throw new Error('名称尚未保存，请重试');
+      } else {
+        const doc = await this.repo.load(id); if (!doc) throw new Error('画板已被删除');
+        if (isEmptyUntitled({ ...doc, title })) await this.repo.remove(id, true);
+        else await this.repo.append(id, [], { title });
+      }
+      this.renderLibrary(await this.repo.list());
+    } catch (error) { this.toast(`重命名失败：${message(error)}`); }
+  }
+
+  private async duplicateBoard(id: string): Promise<void> {
+    try {
+      if (id === this.doc.id) {
+        await this.interaction.settle();
+        if (this.writer && !await this.writer.flush()) throw new Error('请先保存当前画板');
+      }
+      const source = await this.repo.load(id); if (!source) throw new Error('画板已被删除');
+      const copy = { ...source, id: crypto.randomUUID(), title: `${source.title} 副本`.slice(0, 100), created: Date.now(), updated: Date.now(), elements: cloneGroupPaths(source.elements).map(el => ({ ...el, id: crypto.randomUUID() })) };
+      await this.repo.create(copy, thumbnail(copy.elements));
+      this.renderLibrary(await this.repo.list()); this.toast('画板副本已创建');
+    } catch (error) { this.toast(`复制失败：${message(error)}`); }
+  }
+
+  private async openBoard(id: string): Promise<void> {
+    if (this.switching) return;
+    if (id === this.doc.id) { this.closeDialogs(); return; }
+    this.switching = true;
+    try {
+      await this.libraryMutation;
+      this.interaction.finishEditing(); this.interaction.cancel();
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) throw new Error('请先保存当前画板');
       const doc = await this.repo.load(id); if (!doc) throw new Error('找不到这块画板');
       this.closeDialogs(); this.loadDocument(doc);
     } catch (error) { this.toast(message(error)); }
+    finally { this.switching = false; }
   }
 
   private async confirmDelete(): Promise<void> {
     const id = this.deleteId; if (!id) return;
     try {
+      await this.libraryMutation;
       if (id === this.doc.id) {
         if (this.writer && !await this.writer.flush()) throw new Error('请先重试保存');
         this.writer?.stop();
@@ -711,7 +905,7 @@ export class App {
         const boards = await this.repo.list();
         const next = boards[0] ? await this.repo.load(boards[0].id) : null;
         if (next) this.loadDocument(next);
-        else { const doc = createDocument(); await this.repo.create(doc); this.loadDocument(doc); }
+        else this.loadDocument(createDocument(), true, false);
       }
       this.renderLibrary(await this.repo.list()); this.toast('画板已删除');
     } catch (error) { this.toast(message(error)); }

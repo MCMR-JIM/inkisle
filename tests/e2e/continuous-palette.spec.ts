@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
@@ -89,7 +89,7 @@ test('the color field stays bound to the selected slot and outside close saves t
 
 test('cancel rolls back the live preset without saving it or changing a locked selected object', async ({ page }) => {
   await blank(page); await chooseTool(page, '矩形'); await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 450); await page.mouse.up();
-  await chooseTool(page, '选择工具'); await page.mouse.click(600, 300); await page.locator('#lock-button').click();
+  await chooseTool(page, '选择工具'); await page.mouse.click(600, 300); await contextAction(page, 'lock');
   await page.locator('#stroke-palette').click(); const picker = page.locator('#stroke-picker');
   await picker.locator('[data-preset-index="2"]').click(); await picker.getByLabel('HEX 颜色').fill('#112233');
   await expect(page.locator('#stroke-colors [data-color]').nth(2)).toHaveAttribute('data-color', '#112233');
@@ -104,7 +104,7 @@ test('cancel rolls back the live preset without saving it or changing a locked s
 
 test('palette and toolbar explanations share an unclipped tooltip without inline helper text', async ({ page }) => {
   await blank(page); await page.locator('[data-family="shapes"]').hover();
-  await expect(page.getByRole('tooltip')).toHaveText('图形');
+  await expect(page.getByRole('tooltip')).toHaveText(/图形.*Shift.*R/);
   await page.locator('#stroke-palette').click(); await page.locator('#stroke-hex').fill('#123456');
   await page.locator('#stroke-picker .color-preview').hover(); await expect(page.getByRole('tooltip')).toHaveText(/上方是原色/);
   await page.locator('#stroke-picker').getByRole('button', { name: '取消', exact: true }).click();

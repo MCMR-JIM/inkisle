@@ -4,6 +4,7 @@ import { CANVAS_FONT, drawElement, preloadImages, wrapText } from './draw';
 import { shapeVertices } from '../core/paths';
 import { rotationCenter } from '../core/transforms';
 import { inkSVG, smoothInk } from '../core/ink';
+import { arrowHeadKinds, isLinearElement } from '../core/linear';
 
 export function downloadBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
@@ -14,17 +15,26 @@ export function downloadBlob(blob: Blob, name: string): void {
 
 export function fileName(title: string): string { return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 100) || '未命名画板'; }
 
-export async function exportPNG(doc: BoardDocument, elements = doc.elements): Promise<Blob> {
+export interface ExportOptions { padding?: number; transparent?: boolean; scale?: number }
+
+export function exportDimensions(bounds: { w: number; h: number }, options: ExportOptions = {}): { width: number; height: number; scale: number } {
+  const padding = options.padding ?? 48, requested = options.scale ?? 2;
+  if (!Number.isFinite(padding) || padding < 0 || padding > 500 || !Number.isFinite(requested) || requested < 1 || requested > 4) throw new Error('请使用 0–500 的留白和 1–4 倍图片倍率');
+  const w = Math.max(1, bounds.w + padding * 2), h = Math.max(1, bounds.h + padding * 2);
+  const scale = Math.min(requested, 8192 / w, 8192 / h, Math.sqrt(16000000 / (w * h)));
+  return { width: Math.max(1, Math.floor(w * scale)), height: Math.max(1, Math.floor(h * scale)), scale };
+}
+
+export async function exportPNG(doc: BoardDocument, elements = doc.elements, options: ExportOptions = {}): Promise<Blob> {
   const b = unionBounds(elements);
   if (!b) throw new Error('画板还是空的，先写下第一个想法吧');
   await preloadImages(elements);
-  const padding = 48;
-  const w = b.w + padding * 2, h = b.h + padding * 2;
-  const scale = Math.min(2, 8192 / w, 8192 / h, Math.sqrt(16000000 / (w * h)));
+  const padding = options.padding ?? 48;
+  const { width, height, scale } = exportDimensions(b, options);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil(w * scale)); canvas.height = Math.max(1, Math.ceil(h * scale));
+  canvas.width = width; canvas.height = height;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = doc.background; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!options.transparent) { ctx.fillStyle = doc.background; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   ctx.scale(scale, scale); ctx.translate(padding - b.x, padding - b.y);
   for (const el of elements) drawElement(ctx, el);
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片导出失败')), 'image/png'));
@@ -32,12 +42,14 @@ export async function exportPNG(doc: BoardDocument, elements = doc.elements): Pr
 
 const esc = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-export function exportSVG(doc: BoardDocument, elements = doc.elements): Blob {
+export function exportSVG(doc: BoardDocument, elements = doc.elements, options: ExportOptions = {}): Blob {
   const b = unionBounds(elements);
   if (!b) throw new Error('画板还是空的，先写下第一个想法吧');
-  const padding = 40;
+  const padding = options.padding ?? 40;
+  exportDimensions(b, { ...options, padding });
   const measure = document.createElement('canvas').getContext('2d')!;
-  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${b.w + padding * 2}" height="${b.h + padding * 2}" viewBox="${b.x - padding} ${b.y - padding} ${b.w + padding * 2} ${b.h + padding * 2}">`, `<rect x="${b.x - padding}" y="${b.y - padding}" width="${b.w + padding * 2}" height="${b.h + padding * 2}" fill="${doc.background}"/>`];
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${b.w + padding * 2}" height="${b.h + padding * 2}" viewBox="${b.x - padding} ${b.y - padding} ${b.w + padding * 2} ${b.h + padding * 2}">`];
+  if (!options.transparent) parts.push(`<rect x="${b.x - padding}" y="${b.y - padding}" width="${b.w + padding * 2}" height="${b.h + padding * 2}" fill="${doc.background}"/>`);
   for (const [index, el] of elements.entries()) {
     const box = normalizeBounds(el);
     const attrs = `stroke="${el.stroke}" fill="${el.fill === 'transparent' ? 'none' : el.fill}" stroke-width="${el.strokeWidth}" stroke-linecap="round" stroke-linejoin="${el.kind === 'rect' ? 'miter' : 'round'}"${el.dash ? ' stroke-dasharray="8 6"' : ''}`;
@@ -83,11 +95,14 @@ export function exportSVG(doc: BoardDocument, elements = doc.elements): Blob {
     }
     else if (el.kind === 'ellipse') parts.push(`<ellipse cx="${box.x + box.w / 2}" cy="${box.y + box.h / 2}" rx="${box.w / 2}" ry="${box.h / 2}" ${attrs}/>`);
     else if (['diamond', 'triangle', 'pentagon', 'hexagon'].includes(el.kind)) parts.push(`<polygon points="${shapeVertices(el).map(p => `${el.x + p.x},${el.y + p.y}`).join(' ')}" ${attrs}/>`);
-    else if (el.kind === 'line' || el.kind === 'arrow') {
+    else if (isLinearElement(el)) {
       parts.push(`<path d="M${el.x} ${el.y}L${el.x + el.w} ${el.y + el.h}" ${attrs}/>`);
-      if (el.kind === 'arrow') {
-        const angle = Math.atan2(el.h, el.w), length = Math.min(Math.hypot(el.w, el.h) / 2, Math.max(12, el.strokeWidth * 4));
-        parts.push(`<path d="M${el.x + el.w - length * Math.cos(angle - Math.PI / 6)} ${el.y + el.h - length * Math.sin(angle - Math.PI / 6)}L${el.x + el.w} ${el.y + el.h}L${el.x + el.w - length * Math.cos(angle + Math.PI / 6)} ${el.y + el.h - length * Math.sin(angle + Math.PI / 6)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" fill="none" stroke-linecap="round"/>`);
+      const heads = arrowHeadKinds(el);
+      for (const start of [false, true]) {
+        if (!(start ? heads.start : heads.end)) continue;
+        const tip = start ? { x: el.x, y: el.y } : { x: el.x + el.w, y: el.y + el.h };
+        const angle = Math.atan2(start ? -el.h : el.h, start ? -el.w : el.w), length = Math.max(12, el.strokeWidth * 4);
+        parts.push(`<path d="M${tip.x - length * Math.cos(angle - Math.PI / 6)} ${tip.y - length * Math.sin(angle - Math.PI / 6)}L${tip.x} ${tip.y}L${tip.x - length * Math.cos(angle + Math.PI / 6)} ${tip.y - length * Math.sin(angle + Math.PI / 6)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" fill="none" stroke-linecap="round"/>`);
       }
     } else if (el.kind === 'image') parts.push(`<image x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" href="${esc(el.src!)}" preserveAspectRatio="none"/>`);
     else if (el.kind !== 'text') parts.push(`<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="${el.kind === 'rect' ? 0 : el.kind === 'note' ? 3 : Math.min(el.radius, box.w / 2, box.h / 2)}" ${el.kind === 'note' ? `fill="${el.fill}"` : attrs}/>`);

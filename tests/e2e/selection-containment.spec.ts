@@ -21,7 +21,7 @@ test('partial, majority and crossing marquees never select an object until its f
   await blank(page); await drawRect(page);
   for (const box of [[480, 280, 620, 470], [480, 280, 690, 470], [520, 280, 730, 470], [480, 320, 720, 480]]) {
     await marquee(page, ...box as [number, number, number, number]);
-    await expect(page.locator('#selection-actions')).toBeHidden();
+    await expect(page.locator('#selection-status')).toBeHidden();
   }
   await marquee(page, 480, 280, 720, 470); await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
   await page.mouse.click(1050, 650); await marquee(page, 720, 470, 480, 280); await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
@@ -51,7 +51,7 @@ test('rotated shapes require their complete world bounds and containment still w
   await page.reload(); await expect(page.locator('#save-status')).toContainText('已保存在本机');
   const bounds = elementBounds(rotated);
   await marquee(page, bounds.x - 20, bounds.y - 20, bounds.x + bounds.w - 12, bounds.y + bounds.h + 20);
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await marquee(page, bounds.x - 20, bounds.y - 20, bounds.x + bounds.w + 20, bounds.y + bounds.h + 20);
   await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
   await page.mouse.click(1100, 700); await page.locator('#zoom-in').click();
@@ -62,7 +62,7 @@ test('rotated shapes require their complete world bounds and containment still w
   });
   const left = bounds.x * camera.zoom + camera.x, top = bounds.y * camera.zoom + camera.y;
   const right = (bounds.x + bounds.w) * camera.zoom + camera.x, bottom = (bounds.y + bounds.h) * camera.zoom + camera.y;
-  await marquee(page, left - 15, top - 15, right - 12, bottom + 15); await expect(page.locator('#selection-actions')).toBeHidden();
+  await marquee(page, left - 15, top - 15, right - 12, bottom + 15); await expect(page.locator('#selection-status')).toBeHidden();
   await marquee(page, left - 15, top - 15, right + 15, bottom + 15); await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
 });
 

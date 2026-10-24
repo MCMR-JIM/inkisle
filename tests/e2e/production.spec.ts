@@ -1,6 +1,74 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { chooseTool, contextAction, selectValue } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
+import { decodeDocument } from '../../src/core/codec';
+
+test('production eraser wheel and shared slider keep cursor size, masks and preferences consistent across zoom', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await chooseTool(page, '便签'); await page.mouse.click(500, 300); await page.locator('#text-editor').fill('Eraser size'); await page.keyboard.press('Control+Enter');
+  await page.keyboard.press('e'); await page.locator('#eraser-size').fill('40'); await page.mouse.move(900, 400); await page.mouse.wheel(0, -100);
+  await expect(page.locator('#eraser-size-value')).toHaveText('42 px'); await expect(page.locator('#zoom-value')).toHaveText('100%');
+  await page.locator('#eraser-size').fill('40');
+  for (const zoom of [1, 2]) {
+    await selectValue(page, '#zoom-value', zoom); await page.keyboard.press('e'); await page.mouse.click(560, 360);
+    const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
+    const { readFile } = await import('node:fs/promises'); const doc = decodeDocument(new Uint8Array(await readFile((await download.path())!)));
+    expect(doc.elements[0].erasures!.at(-1)!.radiusX).toBeCloseTo(20 / zoom, 6);
+  }
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved'); await page.keyboard.press('e');
+  await expect(page.locator('#eraser-size')).toHaveValue('40');
+});
+
+test('production zoom presets and modal settings share the custom select', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await expect(page.locator('select')).toHaveCount(0);
+  await selectValue(page, '#zoom-value', 2); await expect(page.locator('#zoom-value')).toHaveText('200%');
+  await expect(page.locator('#zoom-value svg')).toHaveCount(0);
+  await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', 'top');
+  await page.getByRole('button', { name: '关闭工作区设置', exact: true }).click();
+  await page.locator('#export-button').click(); await page.locator('[data-action="export-png"]').click();
+  await selectValue(page, '#export-background', 'transparent'); await selectValue(page, '#export-format', 'svg');
+  await expect(page.locator('#export-scale')).toBeDisabled(); await expect(page.locator('#confirm-export')).toHaveText('导出 SVG');
+  await page.getByRole('button', { name: '关闭导出设置', exact: true }).click();
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#zoom-value')).toHaveText('200%');
+  await expect(page.locator('html')).toHaveAttribute('data-toolbar-position', 'top');
+});
+
+test('production unnamed blank boards stay out of the library until named or edited', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+  await page.getByRole('button', { name: '关闭画板库', exact: true }).click();
+  for (let i = 0; i < 3; i++) {
+    await page.locator('#quick-new').click(); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+    await expect(page.locator('#toast')).toBeHidden();
+  }
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+  await page.getByRole('button', { name: '关闭画板库', exact: true }).click();
+  await page.locator('#board-title').fill('Empty plan'); await page.locator('#board-title').press('Enter');
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');
+  await page.reload(); await expect(page.locator('#board-title')).toHaveValue('Empty plan');
+  await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await page.locator('#board-title').fill(''); await page.locator('#board-title').press('Enter');
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await page.locator('#library-button').click(); await expect(page.locator('.board-card')).toHaveCount(1);
+});
+
+test('production highlighter draws wide translucent ink and restores ordinary pen settings', async ({ page }) => {
+  await page.goto('/'); await page.locator('#quick-new').click();
+  await expect(page.locator('#board-title')).toHaveValue('未命名画板'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await page.keyboard.press('p'); await page.getByRole('button', { name: '荧光笔', exact: true }).click();
+  await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(750, 300, { steps: 8 }); await page.mouse.up();
+  await page.getByRole('button', { name: '普通画笔', exact: true }).click();
+  await page.mouse.move(500, 450); await page.mouse.down(); await page.mouse.move(750, 450, { steps: 8 }); await page.mouse.up();
+  const downloading = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await downloading;
+  const { readFile } = await import('node:fs/promises'); const doc = decodeDocument(new Uint8Array(await readFile((await download.path())!)));
+  expect(doc.elements).toHaveLength(2);
+  expect(doc.elements[0]).toMatchObject({ kind: 'pen', stroke: '#f2d64b', strokeWidth: 20, opacity: .35, pressureEnabled: false });
+  expect(doc.elements[1]).toMatchObject({ kind: 'pen', strokeWidth: 2, opacity: 1, pressureEnabled: true });
+});
 
 test('production assets boot and render without development modules or runtime errors', async ({ page }) => {
   const errors: string[] = [];
@@ -10,7 +78,7 @@ test('production assets boot and render without development modules or runtime e
   await expect(page.locator('#element-count')).toHaveText('21 个元素');
   await expect(page.locator('.toolbar .family-caret')).toHaveCount(0);
   expect(await page.locator('#quick-new').evaluate(el => el.nextElementSibling?.id)).toBe('theme-button');
-  expect((await page.locator('.toolbar').boundingBox())!.y).toBeLessThanOrEqual(64);
+  expect((await page.locator('.toolbar').boundingBox())!.y).toBeGreaterThan(700);
   expect(await page.locator('.toolbar .tool-key').evaluateAll(nodes => nodes.filter(el => el.textContent?.trim()).every(el => Number(getComputedStyle(el).opacity) > .5))).toBe(true);
   await page.waitForFunction(() => (window as unknown as { inkisle: { diagnostics: () => { firstSceneFrameMs: number } } }).inkisle.diagnostics().firstSceneFrameMs > 0);
   expect(errors).toEqual([]);
@@ -46,6 +114,31 @@ test('production assets boot and render without development modules or runtime e
   expect(errors).toEqual([]);
 });
 
+test('production nested groups retain independent identities through worker export, import and reopening', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await chooseTool(page, '矩形');
+  for (const x of [450, 650, 900]) { await page.mouse.move(x, 300); await page.mouse.down(); await page.mouse.move(x + 80, 360); await page.mouse.up(); }
+  await chooseTool(page, '选择工具'); await page.mouse.click(490, 300);
+  await page.keyboard.down('Shift'); await page.mouse.click(690, 300); await page.keyboard.up('Shift');
+  await page.keyboard.press('Control+g');
+  await page.keyboard.down('Shift'); await page.mouse.click(940, 300); await page.keyboard.up('Shift');
+  await page.keyboard.press('Control+g');
+  for (let i = 0; i < 8; i++) { await page.keyboard.press('Control+a'); await page.keyboard.press('Control+d'); }
+  await expect(page.locator('#element-count')).toHaveText('768 个元素');
+  const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await pending;
+  const stream = await download.createReadStream(); const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
+  const doc = decodeDocument(Buffer.concat(chunks));
+  expect(new Set(doc.elements.map(el => el.groupPath![0])).size).toBe(256);
+  expect(doc.elements.filter(el => el.groupPath?.length === 2)).toHaveLength(512);
+  await page.locator('#import-file').setInputFiles((await download.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
+  await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.reload(); await expect(page.locator('#element-count')).toHaveText('768 个元素');
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Control+Shift+g');
+  await expect(page.locator('#save-status')).toContainText('已保存在本机');
+  await page.keyboard.press('Control+z'); await expect(page.locator('#element-count')).toHaveText('768 个元素');
+});
+
 test('production custom selector and local erasure remain functional after reopening', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#save-status')).toContainText('已保存在本机');
@@ -77,7 +170,7 @@ test('production recognition forces every stroke into a shape and keeps a separa
   for (let i = 1; i <= 70; i++) await page.mouse.move(600 + 100 * Math.cos(i / 70 * Math.PI * 2), 400 + 96 * Math.sin(i / 70 * Math.PI * 2));
   await page.mouse.up();
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await chooseTool(page, '圆角矩形');
   await page.mouse.move(800, 300); await page.mouse.down(); await page.mouse.move(1000, 450); await page.mouse.up();
   await expect(page.locator('#element-count')).toHaveText('2 个元素');
@@ -274,7 +367,7 @@ test('production selection encloses complete shapes and never selects interface 
   await page.mouse.move(label.x + 2, label.y + label.height / 2); await page.mouse.down(); await page.mouse.move(label.x + label.width - 2, label.y + label.height / 2); await page.mouse.up();
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
   await page.mouse.move(480, 280); await page.mouse.down(); await page.mouse.move(690, 470); await page.mouse.up();
-  await expect(page.locator('#selection-actions')).toBeHidden();
+  await expect(page.locator('#selection-status')).toBeHidden();
   await page.mouse.move(480, 280); await page.mouse.down(); await page.mouse.move(720, 470); await page.mouse.up();
   await expect(page.locator('#selection-label')).toHaveText('已选择 1 个元素');
   const copy = await page.locator('#interaction-canvas').evaluate(el => {
@@ -300,8 +393,8 @@ test('production selected content stays below upper objects while step controls 
   await page.evaluate(() => new Promise(requestAnimationFrame)); expect(await pixel()).toEqual([222, 237, 245]);
   await page.mouse.move(520, 410); await page.mouse.down(); await page.mouse.move(540, 420); await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(await pixel()).toEqual([222, 237, 245]); await page.mouse.up();
-  await page.locator('#bring-forward').click(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
-  await page.locator('#send-backward').click(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([222, 237, 245]);
+  await contextAction(page, 'forward'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
+  await contextAction(page, 'backward'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([222, 237, 245]);
   await page.keyboard.press('Control+]'); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
   await page.reload(); await expect(page.locator('#save-status')).toContainText('已保存在本机'); expect(await pixel()).toEqual([248, 227, 220]);
 });

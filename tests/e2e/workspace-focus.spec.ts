@@ -3,6 +3,8 @@ import { chooseTool } from './helpers';
 
 async function blank(page: Page): Promise<void> {
   await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
+  await page.locator('#board-title').fill('Focus checks'); await page.locator('#board-title').blur();
 }
 
 async function camera(page: Page): Promise<{ x: number; y: number; zoom: number }> {

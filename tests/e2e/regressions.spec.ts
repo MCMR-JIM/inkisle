@@ -54,6 +54,7 @@ test('rotated frame corners lie on the dashed frame and follow the pointer while
 });
 
 test('both toolbars are raised, centered and the submenu is a single horizontal row', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('liubai:toolbar-position', 'top'));
   await page.goto('/');
   const family = page.locator('[data-family="shapes"]'); await family.click();
   const toolbar = page.getByRole('toolbar', { name: '白板工具', exact: true });
@@ -88,12 +89,13 @@ test('both horizontal tool rows stay centered and inside a small viewport', asyn
     expect(box.x).toBeGreaterThanOrEqual(8);
     expect(box.x + box.width).toBeLessThanOrEqual(382);
   }
-  expect((await page.locator('.toolbar').boundingBox())!.y).toBeLessThanOrEqual(58);
+  expect((await page.locator('.toolbar').boundingBox())!.y).toBeGreaterThan(500);
   await page.locator('[data-tool-child="hexagon"]').click();
   await expect(page.locator('[data-family="shapes"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('new board sits immediately left of the theme control with header and raised toolbar inside every viewport', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('liubai:toolbar-position', 'top'));
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
   for (const width of [1440, 900, 640, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });

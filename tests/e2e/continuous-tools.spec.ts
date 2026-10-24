@@ -17,7 +17,7 @@ test('shape, line and recognition tools stay active across consecutive gestures 
       await expect(page.locator('#element-count')).toHaveText(`${count} 个元素`);
       await expect(page.locator(`[data-tool-child="${tool}"]`)).toHaveAttribute('aria-selected', 'true');
       await expect(page.locator('[data-family="select"]')).toHaveAttribute('aria-pressed', 'false');
-      await expect(page.locator('#selection-actions')).toBeHidden();
+      await expect(page.locator('#selection-status')).toBeHidden();
     }
   }
   await chooseTool(page, '选择工具'); await page.keyboard.press('Control+a');
@@ -35,7 +35,7 @@ test('finishing text and notes preserves their tool and allows another item', as
       count++;
       await expect(page.locator('#element-count')).toHaveText(`${count} 个元素`);
       await expect(page.locator(`[data-family="${family}"]`)).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('#selection-actions')).toBeHidden();
+      await expect(page.locator('#selection-status')).toBeHidden();
     }
   }
   await page.keyboard.press('Escape'); await expect(page.locator('[data-family="select"]')).toHaveAttribute('aria-pressed', 'true');
@@ -44,6 +44,7 @@ test('finishing text and notes preserves their tool and allows another item', as
 
 test('Ctrl wheel zoom uses small steps, anchors the pointer and persists both new range limits', async ({ page }) => {
   await blank(page);
+  await page.locator('#board-title').fill('Zoom memory'); await page.locator('#board-title').blur();
   await page.mouse.move(700, 430); await page.keyboard.down('Control'); await page.mouse.wheel(0, -100); await page.keyboard.up('Control');
   await expect.poll(async () => parseFloat((await page.locator('#zoom-value').textContent())!)).toBeGreaterThan(100);
   expect(parseFloat((await page.locator('#zoom-value').textContent())!)).toBeLessThan(111);
