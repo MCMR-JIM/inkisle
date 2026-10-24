@@ -11,7 +11,7 @@ import { selectionFrame, selectionPadding, resizeFromCorner, type CornerHandle }
 import { recognizeShape } from '../core/recognition';
 import { wheelZoom } from '../core/camera';
 import { PressureSampler, pressureValue } from '../core/pressure';
-import { simplifyInk } from '../core/ink';
+import { InkSampler } from '../core/ink';
 import { inScope, selectionUnits, selectedUnits } from '../core/groups';
 import { eraserRadius, normalizeEraserSize, wheelEraserSize } from '../core/eraser';
 
@@ -27,7 +27,7 @@ export interface InteractionHost {
 
 type Gesture =
   | { type: 'pan'; start: Point; camera: Camera }
-  | { type: 'draw'; start: Point; element: BoardElement; recognize?: boolean; sampler?: PressureSampler; pointerId: number }
+  | { type: 'draw'; start: Point; element: BoardElement; recognize?: boolean; sampler?: PressureSampler; inkSampler?: InkSampler; pointerId: number }
   | { type: 'move'; start: Point; originals: BoardElement[] }
   | { type: 'resize'; start: Point; originals: BoardElement[]; bounds: Bounds; handle: CornerHandle }
   | { type: 'endpoint'; endpoint: 'start' | 'end'; start: Point; original: BoardElement }
@@ -196,7 +196,7 @@ export class Interaction {
     const sampler = pressure ? new PressureSampler(e.pointerType, { x: screen.x, y: screen.y, time: e.timeStamp, pressure: e.pressure }) : undefined;
     const element = createElement(tool === 'recognize' ? 'pen' : tool, { ...this.host.styles, groupPath: this.r.state.groupScope?.slice(), x: world.x, y: world.y, ...(ink ? { pressureEnabled: pressure } : {}), points: ink ? [{ x: 0, y: 0, pressure: sampler?.value ?? pressureValue(e.pressure) }] : [] });
     this.r.state.selected.clear();
-    this.gesture = { type: 'draw', start: world, element, recognize: tool === 'recognize', sampler, pointerId: e.pointerId };
+    this.gesture = { type: 'draw', start: world, element, recognize: tool === 'recognize', sampler, inkSampler: tool === 'pen' ? new InkSampler({ ...screen, time: e.timeStamp }) : undefined, pointerId: e.pointerId };
     this.r.state.preview = [element]; this.r.invalidate(false);
   }
 
@@ -215,9 +215,10 @@ export class Interaction {
       if (e.pointerId !== g.pointerId) return;
       const events = e.getCoalescedEvents?.() ?? [e];
       for (const sample of events.length ? events : [e]) {
-        const p = screenToWorld(this.point(sample), this.r.state.camera);
-        const last = g.element.points[g.element.points.length - 1];
         const screen = this.point(sample);
+        const position = g.inkSampler?.next({ ...screen, time: sample.timeStamp }) ?? screen;
+        const p = screenToWorld(position, this.r.state.camera);
+        const last = g.element.points[g.element.points.length - 1];
         const next = { x: p.x - g.start.x, y: p.y - g.start.y, pressure: g.sampler?.next({ x: screen.x, y: screen.y, time: sample.timeStamp, pressure: sample.pressure }) ?? pressureValue(sample.pressure) };
         if (Math.hypot(next.x - last.x, next.y - last.y) >= 0.4 / this.r.state.camera.zoom || g.element.pressureEnabled && Math.abs(next.pressure - (last.pressure ?? .5)) >= .015) g.element.points.push(next);
       }
@@ -318,10 +319,12 @@ export class Interaction {
     if (g.type === 'draw') {
       let el = g.element;
       if (el.kind === 'pen') {
-        const world = screenToWorld(this.point(e), this.r.state.camera), tail = el.points.at(-1)!;
+        const screen = this.point(e), world = screenToWorld(screen, this.r.state.camera), tail = el.points.at(-1)!;
         const point = { x: world.x - el.x, y: world.y - el.y, pressure: tail.pressure };
         // pointerup normally reports zero after contact is gone, not a new thin sample.
-        if (Math.hypot(point.x - tail.x, point.y - tail.y) > .1 / this.r.state.camera.zoom) el.points.push(point);
+        // Releasing at the last input position must not replace the filtered tip.
+        const moved = !g.inkSampler || Math.hypot(screen.x - g.inkSampler.lastPoint.x, screen.y - g.inkSampler.lastPoint.y) > .1;
+        if (moved && Math.hypot(point.x - tail.x, point.y - tail.y) > .1 / this.r.state.camera.zoom) el.points.push(point);
       }
       if (g.recognize) {
         const size = 8 / this.r.state.camera.zoom;
@@ -330,11 +333,8 @@ export class Interaction {
         const origin = { x: el.x, y: el.y };
         el = { ...el, ...geometry, x: origin.x + geometry.x, y: origin.y + geometry.y, points: [], radius: 0 };
       }
-      if (el.kind === 'pen') {
-        // Translucent ink must keep the preview curve: simplifying it at release
-        // changes edge coverage and makes the color visibly jump.
-        if (el.opacity === 1) el = { ...el, points: el.pressureEnabled ? simplifyInk(el.points, 0.35 / this.r.state.camera.zoom) : simplifyPoints(el.points, 0.35 / this.r.state.camera.zoom) };
-      } else if (Math.hypot(el.w, el.h) < 4 / this.r.state.camera.zoom) {
+      // Ink control points define the visible curve; RDP on release changes it.
+      if (el.kind !== 'pen' && Math.hypot(el.w, el.h) < 4 / this.r.state.camera.zoom) {
         el = { ...el, w: 160, h: isLinearElement(el) ? 0 : 100 };
       }
       if (isLinearElement(el)) el = { ...el, rotationHandleSide: lineHandleSide(el) };

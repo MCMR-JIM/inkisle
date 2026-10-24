@@ -1,5 +1,35 @@
 import type { Point } from './model';
-import { pressureValue } from './pressure';
+import { pressureValue, type PressureSample } from './pressure';
+
+/** Input-only, screen-space smoothing. Raw pressure and stored curves stay independent. */
+export class InkSampler {
+  private position: Point;
+  private velocity = { x: 0, y: 0 };
+
+  constructor(private previous: PressureSample) { this.position = { x: previous.x, y: previous.y }; }
+
+  get lastPoint(): Point { return this.previous; }
+
+  next(sample: PressureSample): Point {
+    const dt = Math.max(1, Math.min(50, sample.time - this.previous.time)) / 1000;
+    const response = (cutoff: number): number => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+    const speedResponse = response(10);
+    this.velocity.x += ((sample.x - this.previous.x) / dt - this.velocity.x) * speedResponse;
+    this.velocity.y += ((sample.y - this.previous.y) / dt - this.velocity.y) * speedResponse;
+    // Faster motion raises bandwidth instead of dragging a long stabilizer tail.
+    const alpha = response(8 + .05 * Math.hypot(this.velocity.x, this.velocity.y));
+    const x = this.position.x + (sample.x - this.position.x) * alpha;
+    const y = this.position.y + (sample.y - this.position.y) * alpha;
+    const dx = sample.x - x, dy = sample.y - y, lag = Math.hypot(dx, dy);
+    // Bound tip lag and corner rounding in screen pixels, at every zoom.
+    const pullback = lag > 1.5 ? 1.5 / lag : 1;
+    this.position = sample.x === this.previous.x && sample.y === this.previous.y
+      ? { x: sample.x, y: sample.y }
+      : { x: sample.x - dx * pullback, y: sample.y - dy * pullback };
+    this.previous = sample;
+    return this.position;
+  }
+}
 
 const distance = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y);
 const lerp = (a: Point, b: Point, t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, pressure: pressureValue(a.pressure) + (pressureValue(b.pressure) - pressureValue(a.pressure)) * t });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PressureSampler } from '../../src/core/pressure';
-import { hitInk, inkSVG, simplifyInk, smoothInk } from '../../src/core/ink';
+import { hitInk, InkSampler, inkSVG, simplifyInk, smoothInk } from '../../src/core/ink';
 import { createDocument, createElement } from '../../src/core/model';
 import { decodeDocument, encodeDocument } from '../../src/core/codec';
 import { hitTest } from '../../src/core/geometry';
@@ -33,6 +33,42 @@ describe('pressure input', () => {
     expect(fast.next({ x: 1000, y: 0, time: 399 })).toBe(previous);
     expect(fast.next({ x: 1000, y: 0, time: 420 })).toBeGreaterThanOrEqual(0);
     expect(fast.value).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('screen-space handwriting input', () => {
+  it('attenuates subpixel jitter without moving the start or accumulating tip lag', () => {
+    const sampler = new InkSampler({ x: 0, y: 0, time: 0 });
+    let rawError = 0, filteredError = 0;
+    for (let i = 1; i <= 240; i++) {
+      const sample = { x: i * 2, y: .9 * Math.sin(i * 2.4), time: i * 8 };
+      const point = sampler.next(sample);
+      expect(Math.hypot(point.x - sample.x, point.y - sample.y)).toBeLessThanOrEqual(1.500001);
+      rawError += sample.y ** 2; filteredError += point.y ** 2;
+    }
+    expect(filteredError).toBeLessThan(rawError * .3);
+    expect(sampler.lastPoint.x).toBe(480);
+  });
+
+  it('keeps turns and reversals close to the pointer and settles stationary pressure samples', () => {
+    const sampler = new InkSampler({ x: 0, y: 0, time: 0 });
+    const samples = [[10, 0], [20, 0], [20, 10], [20, 20], [20, 10], [20, 0]];
+    for (const [i, [x, y]] of samples.entries()) {
+      const p = sampler.next({ x, y, time: (i + 1) * 8 });
+      expect(Math.hypot(p.x - x, p.y - y)).toBeLessThanOrEqual(1.500001);
+    }
+    expect(sampler.next({ x: 20, y: 0, time: 64 })).toEqual({ x: 20, y: 0 });
+    expect(sampler.next({ x: 20, y: 0, time: 72 })).toEqual({ x: 20, y: 0 });
+  });
+
+  it('handles repeated, backwards and widely spaced timestamps without losing samples', () => {
+    const sampler = new InkSampler({ x: 0, y: 0, time: 100 });
+    for (const [i, time] of [100, 99, 5000, 5001].entries()) {
+      const sample = { x: (i + 1) * 30, y: 10, time };
+      const p = sampler.next(sample);
+      expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+      expect(Math.hypot(p.x - sample.x, p.y - sample.y)).toBeLessThanOrEqual(1.500001);
+    }
   });
 });
 
