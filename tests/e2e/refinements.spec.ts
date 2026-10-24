@@ -188,9 +188,7 @@ test('eraser gestures respect locks and cancellation, and holes transform with r
   await page.getByRole('button', { name: '选择工具', exact: true }).click();
   await page.mouse.click(550, 400);
   await page.mouse.move(801, 501); await page.mouse.down(); await page.mouse.move(951, 601); await page.mouse.up();
-  const [hole, filled] = await pixels(page, [[725, 405], [640, 405]]);
-  expect(hole.slice(0, 3)).toEqual([248, 249, 246]);
-  expect(filled.slice(0, 3)).toEqual([230, 238, 229]);
+  await expect.poll(async () => (await pixels(page, [[725, 405], [640, 405]])).map(pixel => pixel.slice(0, 3))).toEqual([[248, 249, 246], [230, 238, 229]]);
 });
 
 test('the custom selector remains in the mobile viewport in both themes', async ({ page }) => {
