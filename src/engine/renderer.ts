@@ -201,8 +201,13 @@ export class Renderer {
   private drawOverlay(): void {
     const ctx = this.overlay;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.interactionCanvas.width, this.interactionCanvas.height);
+    const layered = this.state.hidden.size || this.state.tool === 'select' && this.state.selected.size;
+    // Present translucent previews over an opaque copy of the cached scene.
+    // Independently presented canvases can otherwise briefly show both the old
+    // preview and the committed stroke, compositing the same ink twice.
+    if (!layered && this.state.preview.some(el => el.opacity < 1)) ctx.drawImage(this.canvas, 0, 0);
     this.transform(ctx);
-    if (this.state.hidden.size || this.state.tool === 'select' && this.state.selected.size) this.drawLayeredContent(ctx);
+    if (layered) this.drawLayeredContent(ctx);
     else for (const el of this.state.preview) drawElement(ctx, el, true, this.state.camera.zoom, this.state.dark);
     const b = this.selectionBounds();
     const zoom = this.state.camera.zoom;

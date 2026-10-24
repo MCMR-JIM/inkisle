@@ -322,7 +322,9 @@ export class Interaction {
         el = { ...el, ...geometry, x: origin.x + geometry.x, y: origin.y + geometry.y, points: [], radius: 0 };
       }
       if (el.kind === 'pen') {
-        el = { ...el, points: el.pressureEnabled ? simplifyInk(el.points, 0.35 / this.r.state.camera.zoom) : simplifyPoints(el.points, 0.35 / this.r.state.camera.zoom) };
+        // Translucent ink must keep the preview curve: simplifying it at release
+        // changes edge coverage and makes the color visibly jump.
+        if (el.opacity === 1) el = { ...el, points: el.pressureEnabled ? simplifyInk(el.points, 0.35 / this.r.state.camera.zoom) : simplifyPoints(el.points, 0.35 / this.r.state.camera.zoom) };
       } else if (Math.hypot(el.w, el.h) < 4 / this.r.state.camera.zoom) {
         el = { ...el, w: 160, h: isLinearElement(el) ? 0 : 100 };
       }

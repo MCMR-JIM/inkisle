@@ -75,6 +75,43 @@ test('highlighter opacity stays uniform through self-overlap, PNG/SVG and source
   await page.reload(); expect((await read(page))[0].opacity).toBe(.35);
 });
 
+test('curved translucent ink keeps its color and coverage through release and the canvas handoff', async ({ page }) => {
+  for (const theme of ['light', 'dark']) {
+    await blank(page); if (await page.locator('html').getAttribute('data-theme') !== theme) await page.locator('#theme-button').click();
+    await page.getByRole('button', { name: '荧光笔', exact: true }).click();
+    await draw(page, 400);
+    const result = await page.locator('#interaction-canvas').evaluate(async (overlay: HTMLCanvasElement) => {
+      const main = document.querySelector<HTMLCanvasElement>('#canvas')!;
+      overlay.setPointerCapture = () => {};
+      const send = (type: string, x: number, y: number) => overlay.dispatchEvent(new PointerEvent(type, { pointerId: 81, pointerType: 'mouse', clientX: x, clientY: y, pressure: .5, buttons: type === 'pointerup' ? 0 : 1, bubbles: true }));
+      const composite = (top: HTMLCanvasElement) => {
+        const canvas = document.createElement('canvas'); canvas.width = main.width; canvas.height = main.height;
+        const ctx = canvas.getContext('2d')!; ctx.drawImage(main, 0, 0); ctx.drawImage(top, 0, 0);
+        return ctx.getImageData(480, 300, 450, 200).data;
+      };
+      const y = (x: number) => 400 + 40 * Math.sin((x - 500) / 24);
+      send('pointerdown', 500, y(500)); for (let x = 501; x <= 900; x++) send('pointermove', x, y(x));
+      await new Promise(requestAnimationFrame);
+      const oldOverlay = document.createElement('canvas'); oldOverlay.width = overlay.width; oldOverlay.height = overlay.height;
+      oldOverlay.getContext('2d')!.drawImage(overlay, 0, 0);
+      const before = composite(oldOverlay);
+      send('pointerup', 900, y(900)); await new Promise(requestAnimationFrame);
+      const after = composite(overlay);
+      // Desynchronized canvases may present the committed base before clearing
+      // the old preview. That intermediate presentation must not darken ink.
+      const handoff = composite(oldOverlay);
+      let releaseChange = 0, handoffChange = 0;
+      for (let i = 0; i < before.length; i++) {
+        releaseChange = Math.max(releaseChange, Math.abs(before[i] - after[i]));
+        handoffChange = Math.max(handoffChange, Math.abs(before[i] - handoff[i]));
+      }
+      return { releaseChange, handoffChange };
+    });
+    expect(result.releaseChange, theme).toBeLessThanOrEqual(1);
+    expect(result.handoffChange, theme).toBeLessThanOrEqual(1);
+  }
+});
+
 test('both pen modes remain accessible beside top and bottom toolbars at desktop and mobile widths', async ({ page }) => {
   await blank(page);
   for (const width of [1440, 390, 320]) {
