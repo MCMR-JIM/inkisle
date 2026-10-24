@@ -8,7 +8,7 @@
 
 墨屿是一款轻量、本地优先的无限白板，适合随手画图、记录灵感、整理思路和绘制草图。打开画布，用笔迹、图形、文字和便签，把零散的想法连接起来。
 
-基于 TypeScript 和 Canvas 2D 构建，无前端运行时依赖，无需账号或后端服务。画板保存在本机，可导出为源文件、PNG 或 SVG。
+Built with TypeScript and Canvas 2D, with no account or backend required. Boards stay on the device and can be exported as editable source files, PNG, SVG, or PDF. PDF modules load on demand and work offline.
 
 当前版本 **0.2.0**，变更记录见 [更新日志](CHANGELOG.md)。
 
@@ -24,11 +24,12 @@
 - **调色与样式**：可编辑预设、HSV 色盘、HEX 输入、画布吸管，以及独立的描边、填充和填充开关。
 - **本地画板库**：创建、命名、搜索、排序和复制多个画板，自动保存内容、视角与个人设置；未命名的空画板不占用画板库。
 - **图片导出**：PNG / SVG 可选整板或选区、透明或画板背景及留白，PNG 支持 1–4 倍分辨率。
+- **PDF and paper**: Import selected pages, annotate paper and its margins, switch between one-column and two-column layouts, and export within fixed page boundaries.
 - **明暗主题**：响应式布局，支持小屏使用和自定义快捷键。
 
 ## 快速开始
 
-开发环境需要 **Node.js 22.12+**。
+Development requires **Node.js 22.13+**.
 
 ```sh
 git clone https://github.com/MCMR-JIM/inkisle.git
@@ -72,12 +73,15 @@ npm run preview
 
 ### 文件与数据
 
+See [PDF and paper](docs/pdf.md) for import, page layouts, export boundaries, and portable backups.
+
 | 格式 | 用途 |
 | --- | --- |
 | `.inkisle` | 可继续编辑的画板源文件，支持导入和导出 |
 | `.liubai` | 兼容导入的旧版画板文件 |
 | PNG | 图片导出 |
 | SVG | 矢量导出 |
+| PDF | Import selected pages, annotate, and export A4 documents |
 
 PNG 和 SVG 的导出设置可选择整张画板或选区、背景与 0–500 画布单位留白。PNG 显示实际输出尺寸，最大单边 8,192 像素、总计 1,600 万像素；SVG 保留矢量结构。源文件始终导出完整可编辑画板。画板文件可从菜单导入，也可直接拖入画布。
 

@@ -6,7 +6,7 @@ import { PRODUCT } from './product';
 const MAGIC = [0x4c, 0x57, 0x42, 0x31];
 const HEADER = 16;
 const MAX_BYTES = 64 * 1024 * 1024;
-const kinds = new Set(['pen', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon', 'arrow', 'bidirectional-arrow', 'line', 'text', 'note', 'image', 'path']);
+const kinds = new Set(['pen', 'rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'pentagon', 'hexagon', 'arrow', 'bidirectional-arrow', 'line', 'text', 'note', 'image', 'path', 'paper']);
 const color = /^(#[\da-f]{3,8}|transparent)$/i;
 const table = new Uint32Array(256).map((_, n) => {
   let c = n;
@@ -65,6 +65,11 @@ export function validateDocument(input: unknown): asserts input is BoardDocument
     assert(finite(el.fontSize, 1000) && el.fontSize > 0 && finite(el.radius, 1000) && el.radius >= 0);
     assert(typeof el.text === 'string' && el.text.length <= 100000);
     assert(typeof el.locked === 'boolean' && typeof el.dash === 'boolean');
+    if (el.kind === 'paper' || el.paper !== undefined) {
+      assert(el.kind === 'paper' && el.paper && finite(el.paper.margin, 500) && el.paper.margin >= 0);
+      assert(el.w > 0 && el.h > 0 && !el.rotation && el.locked && !el.groupPath?.length && !el.erasures?.length);
+      assert(el.paper.sourceId === undefined && el.paper.sourcePage === undefined || typeof el.paper.sourceId === 'string' && /^[a-f0-9]{64}$/.test(el.paper.sourceId) && Number.isSafeInteger(el.paper.sourcePage) && el.paper.sourcePage! > 0 && el.paper.sourcePage! <= 5000);
+    }
     assert(el.pressureEnabled === undefined || typeof el.pressureEnabled === 'boolean');
     assert(Array.isArray(el.points));
     samples += el.points.length;

@@ -29,12 +29,16 @@ import { PRODUCT, isBoardFile, isElementClipboard, readPreference, writePreferen
 import { SelectionToolbar } from './ui/selection-toolbar';
 import { alignmentChanges, cloneGroupPaths, groupChanges, inScope, selectedUnits, ungroupChanges, type Alignment } from './core/groups';
 import { DEFAULT_ERASER_SIZE, normalizeEraserSize } from './core/eraser';
+import { PdfControls } from './ui/pdf-controls';
+import { exportSource, importSource } from './storage/source-file';
+import { paperDiagnostics } from './engine/paper-render';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
 const penStyle = (styles: Partial<BoardElement>): Partial<BoardElement> => ({ stroke: styles.stroke, strokeWidth: styles.strokeWidth, opacity: styles.opacity, dash: styles.dash, pressureEnabled: styles.pressureEnabled });
 
 export class App {
+  private pdf: PdfControls;
   private codec = new SnapshotCodec();
   private repo = new Repository(PRODUCT.database, this.codec);
   private doc: BoardDocument = createDocument();
@@ -102,6 +106,28 @@ export class App {
       this.firstSceneFrameMs = performance.now() - this.startup;
     };
     this.interaction = this.createInteraction();
+    this.pdf = new PdfControls({
+      document: () => this.document(), apply: (changes, label) => this.scene.apply(changes, label),
+      settle: async () => { this.interaction.finishEditing(); await this.interaction.settle(); },
+      notify: message => this.toast(message), invalidate: () => this.renderer.invalidate(),
+      newBoard: async name => {
+        const previous = this.doc.id; await this.newBoard();
+        if (this.doc.id === previous) throw new Error('请先保存当前画板，再导入 PDF');
+        this.doc.title = name || 'PDF 笔记'; $<HTMLInputElement>('#board-title').value = this.doc.title;
+        this.writer?.enqueue([], { title: this.doc.title });
+      },
+      view: bounds => {
+        const left = $('#properties').hidden ? 24 : $('#properties').getBoundingClientRect().right + 24;
+        const toolbar = $('.toolbar').getBoundingClientRect();
+        const top = document.documentElement.dataset.toolbarPosition === 'top' ? Math.max(90, toolbar.bottom + 20) : 90;
+        const navigation = $('#pdf-navigation');
+        const bottom = navigation.hidden ? 140 : this.renderer.height - navigation.getBoundingClientRect().top + 20;
+        const width = Math.max(80, this.renderer.width - left - 24), height = Math.max(80, this.renderer.height - top - bottom);
+        const zoom = Math.min(1.5, Math.max(MIN_ZOOM, Math.min(width / bounds.w, height / bounds.h)));
+        this.renderer.state.camera = { x: left + width / 2 - (bounds.x + bounds.w / 2) * zoom, y: top + height / 2 - (bounds.y + bounds.h / 2) * zoom, zoom };
+        this.renderer.invalidate(); this.cameraChanged();
+      },
+    });
     this.setEraserSize(state.eraserSize);
     this.colorPickers = {
       stroke: new ColorPicker($('#stroke-palette'), this.palettes.stroke, 'stroke', stroke => this.changeStyle({ stroke }), { preview: (index, color) => this.updatePalette('stroke', index, color, false), change: (index, color) => this.updatePalette('stroke', index, color), reset: () => this.updatePalette('stroke') }),
@@ -311,7 +337,7 @@ export class App {
     $('#workspace').addEventListener('dragover', event => { event.preventDefault(); });
     $('#workspace').addEventListener('drop', event => {
       event.preventDefault(); const e = event as DragEvent; const file = e.dataTransfer?.files[0];
-      if (file && isBoardFile(file.name)) void this.importFile(file); else if (file?.type.startsWith('image/')) void this.addImage(file, { x: e.clientX, y: e.clientY });
+      if (file && (isBoardFile(file.name) || /\.pdf$/i.test(file.name))) void this.importFile(file); else if (file?.type.startsWith('image/')) void this.addImage(file, { x: e.clientX, y: e.clientY });
     });
     document.addEventListener('keydown', event => this.keydown(event), true);
     document.addEventListener('keydown', event => {
@@ -487,6 +513,7 @@ export class App {
   }
 
   private updateDocumentUI(): void {
+    this.pdf.update();
     $('#element-count').textContent = `${this.scene.size} 个元素`;
     this.updateEmptyState();
     document.title = `${this.doc.title} — ${PRODUCT.name}`;
@@ -564,7 +591,7 @@ export class App {
   }
 
   private toggleLock(): void {
-    const elements = this.selected(); const locked = !elements.every(el => el.locked);
+    const elements = this.selected().filter(el => el.kind !== 'paper'); const locked = !elements.every(el => el.locked);
     this.scene.apply(elements.map(el => ({ id: el.id, after: { ...el, locked } })), locked ? '锁定' : '解锁'); this.selectionChanged();
   }
 
@@ -603,7 +630,7 @@ export class App {
     }
     const actions: Record<string, () => void> = {
       undo: () => this.undo(), redo: () => this.redo(), duplicate: () => this.duplicate(), delete: () => this.deleteSelection(), edit: () => this.interaction.editSelected(),
-      'select-all': () => { this.setTool('select'); this.renderer.state.selected = new Set(this.scene.elements.filter(el => inScope(el, this.renderer.state.groupScope ?? [])).map(el => el.id)); this.selectionChanged(); },
+      'select-all': () => { this.setTool('select'); this.renderer.state.selected = new Set(this.scene.elements.filter(el => el.kind !== 'paper' && inScope(el, this.renderer.state.groupScope ?? [])).map(el => el.id)); this.selectionChanged(); },
       group: () => this.groupSelection(), ungroup: () => this.groupSelection(true),
       'new-board': () => { void this.newBoard(); }, export: () => { void this.export('file'); },
       'zoom-in': () => this.zoom(this.renderer.state.camera.zoom * 1.25), 'zoom-out': () => this.zoom(this.renderer.state.camera.zoom / 1.25), 'zoom-reset': () => this.zoom(1),
@@ -680,7 +707,7 @@ export class App {
     const elements = selectionOnly ? this.selected() : doc.elements;
     try {
       if (format === 'file') {
-        downloadBlob(new Blob([await this.codec.encode(doc)], { type: 'application/octet-stream' }), `${fileName(doc.title)}${PRODUCT.extension}`);
+        downloadBlob(await exportSource(doc, this.codec), `${fileName(doc.title)}${PRODUCT.extension}`);
         void this.writer?.flush(); this.toast('源文件已导出，随时可以重新打开');
       } else {
         const blob = format === 'png' ? await exportPNG(doc, elements, exportOptions) : exportSVG(doc, elements, exportOptions);
@@ -719,9 +746,9 @@ export class App {
   }
 
   private async importFile(file: File): Promise<void> {
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') { await this.pdf.import(file); return; }
     try {
-      if (file.size > 65 * 1024 * 1024) throw new Error('文件超过 64 MB');
-      const doc = await this.codec.decode(new Uint8Array(await file.arrayBuffer()));
+      const doc = await importSource(file, this.codec);
       this.interaction.finishEditing();
       await this.interaction.settle();
       if (this.writer && !await this.writer.flush()) throw new Error('请先保存或导出当前画板');
@@ -795,6 +822,7 @@ export class App {
   private perform(action: string): void {
     const actions: Record<string, () => void> = {
       new: () => { void this.newBoard(); }, library: () => { void this.showLibrary(); }, import: () => $('#import-file').click(),
+      'import-pdf': () => $('#import-file').click(), 'add-paper': () => this.pdf.addPaper(), 'export-pdf': () => this.pdf.openExport(),
       'workspace-settings': () => $<HTMLDialogElement>('#workspace-settings-dialog').showModal(),
       group: () => this.groupSelection(), ungroup: () => this.groupSelection(true),
       grid: () => { this.renderer.state.grid = !this.renderer.state.grid; this.renderer.invalidate(); },
@@ -923,7 +951,7 @@ export class App {
 
   /** Read-only diagnostics, deliberately off the input hot path. */
   diagnostics(): object {
-    return { startupMs: this.startupMs, firstSceneFrameMs: this.firstSceneFrameMs, startupPhases: this.startupPhases, elements: this.scene.size, visible: this.renderer.visibleCount, lastFrameMs: this.renderer.lastFrameMs, lastWriteMs: this.writer?.lastWriteMs ?? 0, frames: this.renderer.frames, productionDependencies: 0 };
+    return { startupMs: this.startupMs, firstSceneFrameMs: this.firstSceneFrameMs, startupPhases: this.startupPhases, elements: this.scene.size, visible: this.renderer.visibleCount, lastFrameMs: this.renderer.lastFrameMs, lastWriteMs: this.writer?.lastWriteMs ?? 0, frames: this.renderer.frames, productionDependencies: PRODUCT.runtimeDependencies, pdf: paperDiagnostics() };
   }
 }
 

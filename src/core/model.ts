@@ -1,5 +1,5 @@
-export type ElementKind = 'pen' | 'rect' | 'roundrect' | 'ellipse' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'arrow' | 'bidirectional-arrow' | 'line' | 'text' | 'note' | 'image' | 'path';
-export type Tool = Exclude<ElementKind, 'path'> | 'select' | 'hand' | 'eraser' | 'recognize';
+export type ElementKind = 'pen' | 'rect' | 'roundrect' | 'ellipse' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'arrow' | 'bidirectional-arrow' | 'line' | 'text' | 'note' | 'image' | 'path' | 'paper';
+export type Tool = Exclude<ElementKind, 'path' | 'paper'> | 'select' | 'hand' | 'eraser' | 'recognize';
 export interface Point { x: number; y: number; pressure?: number }
 export interface Bounds { x: number; y: number; w: number; h: number }
 export interface Camera { x: number; y: number; zoom: number }
@@ -38,6 +38,8 @@ export interface BoardElement extends Bounds {
   vertices?: Point[];
   /** Stable group ancestry, ordered from the outermost to the innermost group. */
   groupPath?: string[];
+  /** Fixed paper plus export margin. PDF bytes live once in the asset store. */
+  paper?: { margin: number; sourceId?: string; sourcePage?: number };
 }
 
 export interface BoardDocument {

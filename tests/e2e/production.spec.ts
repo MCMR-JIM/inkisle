@@ -2,6 +2,34 @@ import { expect, test } from '@playwright/test';
 import { chooseTool, contextAction, selectValue } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+test('production PDF import, offline resources, A4 export and portable originals work without development modules', async ({ page }) => {
+  const source = await PDFDocument.create(), font = await source.embedFont(StandardFonts.Helvetica);
+  for (let i = 0; i < 3; i++) {
+    const sheet = source.addPage([420, 595]); sheet.drawText(`PDF page ${i + 1}`, { x: 40, y: 500, font, size: 24 });
+    sheet.drawRectangle({ x: 40, y: 250, width: 200, height: 150, color: rgb(.15, .7, .3) });
+  }
+  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.context().route('**/*', async route => new URL(route.request().url()).origin === 'http://127.0.0.1:14173' ? route.continue() : route.abort());
+  await page.locator('#import-file').setInputFiles({ name: 'production.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await source.save()) });
+  await expect(page.locator('#pdf-import-dialog')).toBeVisible(); await page.locator('#pdf-confirm-import').click();
+  await expect(page.locator('#pdf-page-total')).toHaveText('/ 3'); await page.locator('#pdf-double').click();
+  await expect.poll(() => page.locator('#canvas').evaluate((canvas: HTMLCanvasElement) => {
+    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let green = 0;
+    for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 80 && pixels[i + 1] > 150 && pixels[i + 1] < 210 && pixels[i + 2] < 110) green++;
+    return green;
+  })).toBeGreaterThan(100);
+  await page.locator('#export-button').click(); await page.locator('[data-action="export-pdf"]').click();
+  await page.locator('#pdf-export-range').fill('1-2');
+  const exporting = page.waitForEvent('download'); await page.locator('#pdf-confirm-export').click(); const exported = await exporting;
+  const { readFile } = await import('node:fs/promises');
+  expect((await PDFDocument.load(await readFile((await exported.path())!))).getPageCount()).toBe(2);
+  const saving = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const saved = await saving;
+  await page.locator('#quick-new').click(); await page.locator('#import-file').setInputFiles((await saved.path())!);
+  await expect(page.locator('#toast')).toContainText('画板已导入'); await expect(page.locator('#pdf-page-total')).toHaveText('/ 3');
+});
 
 test('production eraser wheel and shared slider keep cursor size, masks and preferences consistent across zoom', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'saved');

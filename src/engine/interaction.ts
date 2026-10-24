@@ -305,7 +305,7 @@ export class Interaction {
     } else if (g.type === 'marquee') {
       const b = normalizeBounds({ ...g.start, w: world.x - g.start.x, h: world.y - g.start.y });
       this.r.state.marquee = b;
-      this.r.state.selected = new Set([...g.previous, ...selectionUnits(this.r.scene.elements, this.r.state.groupScope ?? []).filter(unit => containsBounds(b, unit.bounds)).flatMap(unit => unit.elements.map(el => el.id))]);
+      this.r.state.selected = new Set([...g.previous, ...selectionUnits(this.r.scene.elements.filter(el => el.kind !== 'paper'), this.r.state.groupScope ?? []).filter(unit => containsBounds(b, unit.bounds)).flatMap(unit => unit.elements.map(el => el.id))]);
     } else if (g.type === 'erase') { this.erase(world); return; }
     this.r.invalidate(false);
   }

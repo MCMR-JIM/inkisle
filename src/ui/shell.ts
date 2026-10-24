@@ -62,6 +62,8 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       <button data-action="new">${icon('plus', 17)}新建画板<kbd>Ctrl Alt N</kbd></button>
       <button data-action="library">${icon('library', 17)}我的画板</button>
       <button data-action="import">${icon('import', 17)}导入 ${PRODUCT.extension} 文件</button>
+      <button data-action="import-pdf">${icon('import', 17)}导入 PDF</button>
+      <button data-action="add-paper">${icon('rect', 17)}添加纸张</button>
       <hr/><button data-action="grid">${icon('grid', 17)}显示 / 隐藏网格<kbd>G</kbd></button>
       <button data-action="help">${icon('keyboard', 17)}快捷键帮助<kbd>?</kbd></button>
       <button data-action="workspace-settings">${icon('settings', 17)}工作区设置</button>
@@ -71,6 +73,7 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       <button data-action="export-file">${icon('export', 17)}${PRODUCT.name}源文件<span>${PRODUCT.extension}</span></button>
       <button data-action="export-png">${icon('image', 17)}导出高清图片<span>PNG</span></button>
       <button data-action="export-svg">${icon('rect', 17)}导出矢量图<span>SVG</span></button>
+      <button data-action="export-pdf">${icon('export', 17)}导出文档<span>PDF</span></button>
     </div>
     <div class="menu panel" id="context-menu" hidden>
       <button data-action="edit">${icon('text', 17)}编辑文字<kbd>Enter</kbd></button>
@@ -90,7 +93,18 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
     <dialog id="help-dialog" class="dialog help-dialog" aria-labelledby="shortcut-title"><div class="dialog-header"><div><h2 id="shortcut-title">快捷键</h2><p>按你的习惯设置，让创作更顺手。</p></div><button data-close class="icon-button" aria-label="关闭帮助">${icon('close')}</button></div><div class="shortcut-settings-heading"><p id="shortcut-status" role="status">点击右侧键位，按下新的组合键即可修改</p><button id="reset-shortcuts" class="text-button">恢复默认</button></div><div id="shortcut-list" class="shortcut-list"></div><div class="help-tip">${icon('info', 17)}<span>空格 + 拖动平移 · Shift 多选 / 约束 · Ctrl + 滚轮缩放<br/>Ctrl C / X / V 复制、剪切、粘贴 · Ctrl Enter 完成文字 · Esc 取消<br/>macOS 的 Ctrl 对应 Command。填充颜色通过点击选择。</span></div><div class="dialog-footer"><span>快捷键自动保存在本机</span><span>${PRODUCT.name} v${PRODUCT.version}</span></div></dialog>
     <dialog id="confirm-dialog" class="dialog confirm-dialog"><h2>删除这块画板？</h2><p>此操作无法撤销。你可以先导出一份源文件。</p><div><button id="cancel-delete" class="button button-subtle">保留画板</button><button id="confirm-delete" class="button button-danger">删除画板</button></div></dialog>
     <div id="toast" class="toast" role="status" hidden></div>
-    <input type="file" id="import-file" accept="${PRODUCT.extension},${PRODUCT.legacyExtension}" hidden />
+    ${floatingBarMarkup({ id: 'pdf-navigation', label: 'PDF 页面', className: 'pdf-navigation', layout: 'compact', items: [
+      { type: 'option', label: '单页', ariaLabel: '单页连续布局', attributes: { id: 'pdf-single' } },
+      { type: 'option', label: '双页', ariaLabel: '双页连续布局', attributes: { id: 'pdf-double' } },
+      { type: 'separator' },
+      { type: 'option', label: '上一页', attributes: { id: 'pdf-previous' } },
+      { type: 'option', label: '下一页', attributes: { id: 'pdf-next' } },
+      { type: 'option', label: '加纸', ariaLabel: '添加一张纸', attributes: { id: 'pdf-add-paper' } },
+      { type: 'option', label: '删页', ariaLabel: '删除本页及页内内容', attributes: { id: 'pdf-remove-paper' } },
+    ], contentAfter: '<div class="pdf-page-jump"><label for="pdf-jump">页码</label><input id="pdf-jump" type="number" min="1" value="1" aria-label="跳转 PDF 页码"/><span id="pdf-page-total"></span></div><div class="pdf-boundary-status"><span id="pdf-overflow-status" role="status"></span><button type="button" id="pdf-locate-overflow" class="text-button" hidden>定位越界</button></div>' })}
+    <dialog id="pdf-import-dialog" class="dialog" aria-labelledby="pdf-import-title"><div class="dialog-header"><h2 id="pdf-import-title">导入 PDF</h2><button type="button" data-close class="icon-button" aria-label="关闭 PDF 导入">${icon('close')}</button></div><form id="pdf-import-form" class="pdf-fields"><p id="pdf-import-summary"></p><label for="pdf-import-target">导入到</label><button type="button" id="pdf-import-target" aria-label="PDF 导入目标"></button><label for="pdf-import-range">导入页码</label><input id="pdf-import-range" placeholder="例如 1-5,8" required/><p id="pdf-import-status" role="status"></p><button id="pdf-confirm-import" class="button button-primary" type="submit">导入页面</button></form></dialog>
+    <dialog id="pdf-export-dialog" class="dialog" aria-labelledby="pdf-export-title"><div class="dialog-header"><h2 id="pdf-export-title">导出 PDF</h2><button type="button" data-close class="icon-button" aria-label="关闭 PDF 导出">${icon('close')}</button></div><form id="pdf-export-form" class="pdf-fields"><p id="pdf-export-summary"></p><label for="pdf-export-range">导出页码</label><input id="pdf-export-range" placeholder="例如 1-5,8" required/><p id="pdf-export-status" role="status"></p><div class="pdf-export-actions"><button type="button" id="pdf-cancel-export" class="button button-subtle">取消</button><button id="pdf-confirm-export" class="button button-primary" type="submit">导出 PDF</button></div></form></dialog>
+    <input type="file" id="import-file" accept="${PRODUCT.extension},${PRODUCT.legacyExtension},.pdf" hidden />
     <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" hidden />
   `;
 }

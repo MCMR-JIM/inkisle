@@ -6,6 +6,7 @@ import { rotationCenter } from '../core/transforms';
 import { shapeVertices } from '../core/paths';
 import { inkPath, smoothInk } from '../core/ink';
 import { textFont, textLeading, wrapText } from './text-layout';
+import { paintPaper } from './paper-render';
 
 export { CANVAS_FONT, wrapText } from './text-layout';
 const paths = new Map<string, { source: BoardElement; path: Path2D; width: number; pressure: boolean; dash: boolean }>();
@@ -73,7 +74,10 @@ function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, pr
   }
   const b = normalizeBounds(el);
 
-  if (el.kind === 'path' && el.path) {
+  if (el.kind === 'paper') {
+    ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff'; ctx.fillRect(el.x, el.y, el.w, el.h);
+    paintPaper(ctx, el, zoom);
+  } else if (el.kind === 'path' && el.path) {
     ctx.translate(el.x, el.y);
     let cached = geometryPaths.get(el.path);
     if (!cached) {

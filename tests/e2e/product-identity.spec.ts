@@ -14,7 +14,7 @@ test('InkIsle branding and .inkisle exports are consistent, while source files r
   expect(file.suggestedFilename()).toBe('墨屿往返.inkisle');
   await page.locator('#import-file').setInputFiles((await file.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
-  await expect(page.locator('#import-file')).toHaveAttribute('accept', '.inkisle,.liubai');
+  await expect(page.locator('#import-file')).toHaveAttribute('accept', '.inkisle,.liubai,.pdf');
   await page.locator('#export-button').click(); await expect(page.locator('[data-action="export-file"]')).toContainText('墨屿源文件');
   await expect(page.locator('[data-action="export-file"]')).toContainText('.inkisle');
   expect(await page.evaluate(() => (window as unknown as { inkisle: unknown; liubai: unknown }).inkisle === (window as unknown as { liubai: unknown }).liubai)).toBe(true);
