@@ -1,12 +1,12 @@
 # Windows 发行版
 
-## 已保留的留白版本
+## 旧版留白桌面包
 
-产品源码现已更名为 **墨屿 · InkIsle**。下述两个 `Liubai` 发行包是此前已生成的留白版本，按用户要求完整保留，本轮没有重新打包，也未替换其中任何文件。因此运行这些旧 EXE 仍显示“留白”，使用 `.liubai` 后缀；体验改名和侧栏更新请运行当前 Web 源码。
+产品源码现已更名为 **墨屿 · InkIsle**。下述 `Liubai` 桌面包仍显示“留白”，使用 `.liubai` 后缀，功能对应旧版源码。使用当前功能可运行 Web 版，或按下文构建墨屿桌面版。
 
-保留的两个 Windows 10/11 x64 绿色发行版：
+两个 Windows 10/11 x64 绿色发行版：
 
-| 包 | 体积（本次构建） | WebView2 | 适合场景 |
+| 包 | 压缩体积 | WebView2 | 适合场景 |
 |---|---:|---|---|
 | `Liubai-win-x64-lite.zip` | 223,461 bytes（约 218 KiB） | 使用系统 WebView2 | 日常分发，体积最小 |
 | `Liubai-win-x64-offline.zip` | 311,578,028 bytes（约 297 MiB） | 随包 Fixed Version 155.0.4283.62 | 无网络、无预装运行库 |
@@ -41,9 +41,9 @@
 
 轻量版和离线版默认共用同一数据目录，因此可以直接切换版本。程序本身不把用户画板写入发行目录；复制程序到 U 盘不会自动复制画板数据。
 
-## 下次构建墨屿版本
+## 构建墨屿桌面版
 
-后续构建脚本输出 `InkIsle-win-x64-lite/InkIsle.exe` 和 `InkIsle-win-x64-offline/InkIsle.exe` 及同名 ZIP，源文件为 `.inkisle`，导入兼容旧 `.liubai`。这些新名称产物尚未生成；此前的 `Liubai-*` 目录和 ZIP 不会被新命令清理或覆盖。
+构建脚本输出 `InkIsle-win-x64-lite/InkIsle.exe` 和 `InkIsle-win-x64-offline/InkIsle.exe` 及同名 ZIP，源文件为 `.inkisle`，导入兼容旧 `.liubai`。
 
 构建机要求 Windows、Node.js、MinGW-w64 GCC、`windres`、`objdump`、PowerShell 7 和 `tar`。构建脚本会固定并校验 WebView2 SDK 及离线 Runtime 的 SHA-256，生成 Vite 资源、原生 EXE、manifest 和 ZIP：
 
@@ -60,15 +60,17 @@ $env:INKISLE_WEBVIEW2_RUNTIME = 'C:\path\to\fixed-runtime-x64'
 npm run package:win:offline
 ```
 
-未来构建使用 `release/inkisle-windows-build-summary.json` 保存包体大小、SHA-256 和原生 DLL 依赖，不覆盖旧的 `windows-build-summary.json`。各包的 `build-manifest.json` 保存所有文件哈希、Logo 尺寸、WebView2 版本和入口地址。旧 `LIUBAI_WEBVIEW2_RUNTIME` 环境变量仍作为兼容输入。
+`release/inkisle-windows-build-summary.json` 保存包体大小、SHA-256 和原生 DLL 依赖。各包的 `build-manifest.json` 保存所有文件哈希、Logo 尺寸、WebView2 版本和入口地址。旧 `LIUBAI_WEBVIEW2_RUNTIME` 环境变量仍作为兼容输入。
 
-## 下次打包后的原生验证
+## 原生验证
 
 ```powershell
 npm run test:windows
 ```
 
-该命令以未来 `InkIsle-*` 产物为目标，生成 `inkisle-windows-verification.json`；本轮未运行。此前留白版本已经完成的验证内容包括：
+该命令以 `InkIsle-*` 构建产物为目标，生成 `inkisle-windows-verification.json`，检查资源哈希、原生窗口、WebView2 运行环境和文件操作。
+
+旧版留白桌面包的验证范围包括：
 
 - EXE/资源文件 manifest 哈希和 x64 PE 检查；
 - Logo 的九档嵌入资源、资源管理器提取图标和真实窗口大小图标；
