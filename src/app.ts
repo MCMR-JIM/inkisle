@@ -363,6 +363,7 @@ export class App {
   }
 
   private renderToolState(): void {
+    this.updateEmptyState();
     const activeFamily = familyForTool(this.renderer.state.tool);
     document.querySelectorAll<HTMLElement>('[data-family]').forEach(button => {
       const active = button.dataset.family === activeFamily.id;
@@ -481,9 +482,13 @@ export class App {
     writePreference('fill-color', selectedFill(this.styles));
   }
 
+  private updateEmptyState(): void {
+    $('#empty-state').hidden = this.scene.size > 0 || !['select', 'hand'].includes(this.renderer.state.tool);
+  }
+
   private updateDocumentUI(): void {
     $('#element-count').textContent = `${this.scene.size} 个元素`;
-    $('#empty-state').hidden = this.scene.size > 0;
+    this.updateEmptyState();
     document.title = `${this.doc.title} — ${PRODUCT.name}`;
     this.updateHistory();
     this.cameraChanged(false);
