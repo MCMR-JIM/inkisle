@@ -31,6 +31,10 @@ export const TOOL_FAMILIES: ToolFamily[] = [
   { id: 'text', label: '文字', icon: 'text', key: 'T' },
   { id: 'note', label: '便签', icon: 'note', key: 'N' },
   { id: 'image', label: '插入图片', icon: 'image', key: 'I' },
+  { id: 'capture', label: '截取区域', icon: 'capture', key: 'C', options: [
+    { type: 'option', label: '矩形框选', icon: 'capture', attributes: { 'data-capture-mode': 'rectangle', 'aria-pressed': 'true' } },
+    { type: 'option', label: '逐点围选', icon: 'polygon', tooltip: '逐点连线，点击起点或按 Enter 闭合；Backspace 撤回一点', attributes: { 'data-capture-mode': 'polygon', 'aria-pressed': 'false' } },
+  ] },
   { id: 'eraser', label: '橡皮擦', icon: 'eraser', key: 'E', options: [
     { type: 'range', id: 'eraser-size', label: '橡皮大小', min: MIN_ERASER_SIZE, max: MAX_ERASER_SIZE, step: ERASER_SIZE_STEP, value: DEFAULT_ERASER_SIZE, unit: 'px' },
   ] },

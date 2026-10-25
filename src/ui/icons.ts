@@ -1,4 +1,6 @@
 const paths: Record<string, string> = {
+  capture: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 7h10v10H7Z"/>',
+  polygon: '<path d="m5 5 14 3-2 12-13-5Z"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="8" r="2"/><circle cx="17" cy="20" r="2"/><circle cx="4" cy="15" r="2"/>',
   paperPlus: '<path d="M14 3H5v18h14V8Z"/><path d="M14 3v5h5M8 14h8m-4-4v8"/>',
   arrowLeft: '<path d="M19 12H5m6-6-6 6 6 6"/>',
   select: '<path d="m5 3 14 9-6 1.5L10 20Z"/>',

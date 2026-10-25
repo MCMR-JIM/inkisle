@@ -23,9 +23,11 @@ export interface InteractionHost {
   onEraserSize(size: number): void;
   setTool(tool: Tool): void;
   onContext(event: MouseEvent): void;
+  capture?: { pointer(type: 'down' | 'move' | 'up', point: Point, event: PointerEvent): void; cancel(): void; finish(): void };
 }
 
 type Gesture =
+  | { type: 'capture'; pointerId: number }
   | { type: 'pan'; start: Point; camera: Camera }
   | { type: 'draw'; start: Point; element: BoardElement; recognize?: boolean; sampler?: PressureSampler; inkSampler?: InkSampler; pointerId: number }
   | { type: 'move'; start: Point; originals: BoardElement[] }
@@ -139,6 +141,7 @@ export class Interaction {
     this.pointers.set(e.pointerId, screen);
     this.r.interactionCanvas.setPointerCapture(e.pointerId);
     if (this.pointers.size === 2) {
+      this.host.capture?.cancel();
       this.clearPreview();
       const [a, b] = [...this.pointers.values()];
       this.gesture = { type: 'pinch', distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), midpoint: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, camera: { ...this.r.state.camera } };
@@ -150,6 +153,10 @@ export class Interaction {
       return;
     }
     const tool = this.r.state.tool;
+    if (tool === 'capture') {
+      this.gesture = { type: 'capture', pointerId: e.pointerId };
+      this.host.capture?.pointer('down', world, e); return;
+    }
     if (tool === 'select') {
       const endpoint = this.r.endpointAt(screen);
       if (endpoint) {
@@ -204,6 +211,9 @@ export class Interaction {
     const screen = this.point(e);
     if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, screen);
     this.r.state.cursor = screen;
+    if (this.r.state.tool === 'capture' && (!this.gesture || this.gesture.type === 'capture' && this.gesture.pointerId === e.pointerId)) {
+      this.host.capture?.pointer('move', screenToWorld(screen, this.r.state.camera), e); return;
+    }
     if (this.gesture?.type === 'erase') {
       const events = e.getCoalescedEvents?.() ?? [e];
       for (const sample of events.length ? events : [e]) this.erase(screenToWorld(this.point(sample), this.r.state.camera));
@@ -312,10 +322,14 @@ export class Interaction {
 
   private up(e: PointerEvent): void {
     const g = this.gesture;
+    if (g?.type === 'capture' && g.pointerId !== e.pointerId) { this.pointers.delete(e.pointerId); return; }
     if (g?.type === 'draw' && g.pointerId !== e.pointerId) { this.pointers.delete(e.pointerId); return; }
     this.pointers.delete(e.pointerId);
     this.gesture = null;
     if (!g) return;
+    if (g.type === 'capture') {
+      this.host.capture?.pointer('up', screenToWorld(this.point(e), this.r.state.camera), e); return;
+    }
     if (g.type === 'draw') {
       let el = g.element;
       if (el.kind === 'pen') {
@@ -398,6 +412,7 @@ export class Interaction {
   }
 
   private doubleClick(e: MouseEvent): void {
+    if (this.r.state.tool === 'capture') { this.host.capture?.finish(); return; }
     if (this.r.state.tool !== 'select') return;
     const world = screenToWorld(this.point(e), this.r.state.camera);
     const el = this.hit(world);
@@ -474,6 +489,7 @@ export class Interaction {
   }
 
   cancel(): void {
+    this.host.capture?.cancel();
     this.gesture = null; this.pointers.clear();
     this.clearPreview(); this.updateCursor();
   }

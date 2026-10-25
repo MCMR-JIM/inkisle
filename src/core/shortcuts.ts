@@ -16,6 +16,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
   { id: 'tool:arrow', label: '箭头', key: 'A' }, { id: 'tool:line', label: '直线', key: 'L' },
   { id: 'tool:bidirectional-arrow', label: '双向箭头', key: '' }, { id: 'tool:text', label: '文字', key: 'T' },
   { id: 'tool:note', label: '便签', key: 'N' }, { id: 'tool:image', label: '插入图片', key: 'I' },
+  { id: 'tool:capture', label: '截取区域', key: 'C' },
   { id: 'undo', label: '撤销', key: 'Mod+Z' }, { id: 'redo', label: '重做', key: 'Mod+Shift+Z', aliases: ['Mod+Y'] },
   { id: 'select-all', label: '全选', key: 'Mod+A' }, { id: 'duplicate', label: '复制一份', key: 'Mod+D' },
   { id: 'delete', label: '删除选中', key: 'Delete', aliases: ['Backspace'] }, { id: 'edit', label: '编辑文字', key: 'Enter' },

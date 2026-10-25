@@ -5,6 +5,32 @@ import { decodeDocument } from '../../src/core/codec';
 import { PDFDocument } from 'pdf-lib';
 import { pdfFixture } from '../fixtures/pdf';
 
+test('production region capture flattens PDF content into an independent image through keyboard actions', async ({ page }) => {
+  await page.goto('/'); await createBoard(page);
+  await page.locator('#import-file').setInputFiles({ name: 'capture.pdf', mimeType: 'application/pdf', buffer: await pdfFixture(1) });
+  await page.locator('#pdf-confirm-import').click(); await expect(page.locator('#pdf-page-total')).toHaveText('/ 1');
+  const snapshot = async () => {
+    const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const file = await pending;
+    const { readFile } = await import('node:fs/promises'); const bytes = await readFile((await file.path())!);
+    const size = bytes.readUInt32LE(4), manifest = JSON.parse(bytes.subarray(8, 8 + size).toString());
+    return decodeDocument(bytes.subarray(8 + size, 8 + size + manifest.documentBytes));
+  };
+  const before = await snapshot(), paper = before.elements[0], camera = before.camera;
+  const a = { x: paper.x * camera.zoom + camera.x + 10, y: paper.y * camera.zoom + camera.y + 10 };
+  const b = { x: (paper.x + paper.w) * camera.zoom + camera.x - 10, y: (paper.y + paper.h) * camera.zoom + camera.y - 10 };
+  await page.getByRole('button', { name: '截取区域', exact: true }).click();
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y); await page.mouse.up();
+  const insert = page.locator('[data-capture-action="insert"]'); await expect(insert).toBeVisible(); await expect(insert).toBeEnabled();
+  await insert.focus(); await page.keyboard.press('Enter'); await expect(page.locator('#capture-actions')).toBeHidden();
+  const after = await snapshot(), image = after.elements[1]; expect(after.elements).toHaveLength(2); expect(image.kind).toBe('image'); expect(image.paper).toBeUndefined();
+  const color = await page.evaluate(async src => {
+    const image = new Image(); image.src = src!; await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext('2d')!; ctx.drawImage(image, 0, 0); return [...ctx.getImageData(image.width * .3, image.height * .45, 1, 1).data];
+  }, image.src);
+  expect(color[0]).toBeLessThan(80); expect(color[1]).toBeGreaterThan(150); expect(color[2]).toBeLessThan(110);
+  await page.keyboard.press('Control+z'); expect((await snapshot()).elements).toHaveLength(1);
+});
+
 test('production PDF import, offline resources, A4 export and portable originals work without development modules', async ({ page }) => {
   const source = await pdfFixture();
   await page.goto('/'); await createBoard(page);

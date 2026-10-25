@@ -26,6 +26,7 @@ Built with TypeScript and Canvas 2D, with no account or backend required. Boards
 - **图片导出**：PNG / SVG 可选整板或选区、透明或画板背景及留白，PNG 支持 1–4 倍分辨率。
 - **PDF and paper**: Import selected pages, annotate paper and its margins, switch between one-column and two-column layouts, and export within fixed page boundaries.
 - **Desktop tools**: Light/dark themes and configurable keyboard shortcuts.
+- **Region capture**: Drag a rectangle or click polygon vertices to flatten visible layers, including PDF pages, into an independent image. Close polygons at their first vertex or with Enter; Backspace removes a vertex. Copy the region or insert it in place without changing the originals.
 
 ## 快速开始
 

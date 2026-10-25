@@ -34,6 +34,8 @@ import { exportSource, importSource } from './storage/source-file';
 import { paperDiagnostics } from './engine/paper-render';
 import { BoardCreation } from './ui/board-creation';
 import { paperPages } from './core/paper';
+import { RegionCapture } from './ui/region-capture';
+import type { CapturedRegion } from './engine/capture';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
 interface ClipboardData { type: typeof PRODUCT.clipboardType | typeof PRODUCT.legacyClipboardType; elements: BoardElement[] }
@@ -49,6 +51,8 @@ export class App {
   renderer: Renderer;
   private interaction: Interaction;
   private selectionToolbar: SelectionToolbar;
+  private capture: RegionCapture;
+  private captureClipboardFallback = false;
   private fontSize: CustomSelect;
   private zoomLevel: CustomSelect;
   private librarySort: CustomSelect<'updated' | 'title'>;
@@ -103,8 +107,19 @@ export class App {
     document.documentElement.dataset.theme = state.dark ? 'dark' : 'light';
     this.renderer = new Renderer(this.scene, $('#canvas'), $('#interaction-canvas'), state);
     this.selectionToolbar = new SelectionToolbar(this.renderer);
+    this.capture = new RegionCapture({
+      renderer: this.renderer,
+      settle: async () => { this.interaction.finishEditing(); await this.interaction.settle(); },
+      notify: message => this.toast(message), copy: (result, event) => this.copyCapture(result, event),
+      insert: element => {
+        this.setTool('select'); this.renderer.state.groupScope = [];
+        this.scene.apply([{ id: element.id, after: element }], '截取区域');
+        this.renderer.state.selected = new Set([element.id]); this.selectionChanged();
+      },
+    });
     this.renderer.onFrame = () => {
       this.selectionToolbar.update();
+      this.capture.update();
       if (!this.ready || this.firstSceneFrameMs) return;
       this.firstSceneFrameMs = performance.now() - this.startup;
     };
@@ -156,6 +171,7 @@ export class App {
       onSelection: () => this.selectionChanged(), onCamera: () => this.cameraChanged(),
       onEraserSize: size => this.setEraserSize(size),
       setTool: tool => this.setTool(tool), onContext: event => this.contextMenu(event),
+      capture: this.capture,
     });
   }
 
@@ -360,6 +376,7 @@ export class App {
     document.addEventListener('copy', event => this.copy(event));
     document.addEventListener('cut', event => { if (this.copy(event)) this.deleteSelection(); });
     document.addEventListener('paste', event => this.paste(event));
+    window.addEventListener('blur', () => { this.captureClipboardFallback = false; });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { this.interaction.finishEditing(); void this.interaction.settle().then(() => this.writer?.flush()); } });
     window.addEventListener('beforeunload', event => { if (this.writer?.pending || this.interaction.isEditing || this.interaction.hasPendingGeometry) { void this.writer?.flush(); event.preventDefault(); } });
   }
@@ -367,6 +384,7 @@ export class App {
   setTool(tool: Tool): void {
     if (tool === 'image') { $('#image-file').click(); return; }
     this.interaction?.finishEditing();
+    if (this.renderer.state.tool !== tool) this.interaction?.cancel();
     this.syncPenProfile(tool === 'pen' && this.penMode === 'highlighter');
     this.renderer.state.tool = tool;
     if (tool !== 'select') this.renderer.state.selected.clear();
@@ -618,8 +636,9 @@ export class App {
       return;
     }
     if (target?.closest('[role="combobox"], [role="listbox"]')) return;
-    if (e.key === 'Escape') { if (this.interaction.exitGroup()) { e.preventDefault(); return; } this.renderer.state.selected.clear(); this.closeMenus(); this.setTool('select'); return; }
     if ((e.key === 'Enter' || e.key === ' ') && target?.closest('button')) return;
+    if (this.capture.keydown(e)) { e.stopPropagation(); return; }
+    if (e.key === 'Escape') { if (this.interaction.exitGroup()) { e.preventDefault(); return; } this.renderer.state.selected.clear(); this.closeMenus(); this.setTool('select'); return; }
     let action = this.shortcuts.action(e);
     const accelerated = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.startsWith('Arrow');
     if (!action && accelerated) {
@@ -675,31 +694,54 @@ export class App {
 
   private copy(event: ClipboardEvent): boolean {
     if (isTextInput(event.target) || document.querySelector('dialog[open]')) return false;
+    if (this.renderer.state.tool === 'capture' && this.capture.copy(event)) return true;
     const elements = this.selected().map(el => ({ ...el, groupPath: el.groupPath?.slice(this.renderer.state.groupScope?.length ?? 0) }));
     if (!elements.length) {
       event.preventDefault(); window.getSelection()?.removeAllRanges();
       return false;
     }
-    event.preventDefault(); this.clipboard = structuredClone(elements);
+    event.preventDefault(); this.clipboard = structuredClone(elements); this.captureClipboardFallback = false;
     event.clipboardData?.setData('text/plain', JSON.stringify({ type: PRODUCT.clipboardType, elements } satisfies ClipboardData));
     this.toast(`已复制 ${elements.length} 个元素`); return true;
   }
 
+  private copyCapture(result: CapturedRegion, event?: ClipboardEvent): void {
+    const elements = this.clipboard = [structuredClone(result.element)];
+    const text = JSON.stringify({ type: PRODUCT.clipboardType, elements } satisfies ClipboardData);
+    if (event) { event.preventDefault(); event.clipboardData?.setData('text/plain', text); }
+    this.captureClipboardFallback = !event;
+    this.toast('已复制区域，可粘贴为独立图片');
+    if (!event) {
+      // Keep the application clipboard usable when the host denies system clipboard access.
+      void (async () => {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': result.blob, 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+          if (this.clipboard === elements) this.captureClipboardFallback = false;
+        } catch { /* The next in-app paste uses the already prepared independent image. */ }
+      })();
+    }
+  }
+
   private paste(event: ClipboardEvent): void {
     if (isTextInput(event.target) || document.querySelector('dialog[open]')) return;
-    const image = [...(event.clipboardData?.files ?? [])].find(file => file.type.startsWith('image/'));
-    if (image) { event.preventDefault(); void this.addImage(image); return; }
     const text = event.clipboardData?.getData('text/plain');
-    if (!text && this.clipboard.length) { event.preventDefault(); this.insertElements(this.clipboard, true); return; }
-    if (!text) return;
-    event.preventDefault();
+    if (this.captureClipboardFallback) {
+      event.preventDefault(); this.captureClipboardFallback = false; this.insertElements(this.clipboard, true); return;
+    }
+    const image = [...(event.clipboardData?.files ?? [])].find(file => file.type.startsWith('image/'));
+    if (!text && !image && this.clipboard.length) { event.preventDefault(); this.insertElements(this.clipboard, true); return; }
+    if (!text && !image) return;
     try {
-      const data: ClipboardData = JSON.parse(text);
+      const data: ClipboardData = JSON.parse(text ?? '');
       if (isElementClipboard(data.type)) {
         const doc = createDocument(); doc.elements = data.elements; validateDocument(doc);
+        event.preventDefault();
         this.insertElements(data.elements, true); return;
       }
     } catch { /* Ordinary text is pasted as a text element. */ }
+    if (image) { event.preventDefault(); void this.addImage(image); return; }
+    if (!text) return;
+    event.preventDefault();
     const point = screenToWorld({ x: this.renderer.width / 2 - 150, y: this.renderer.height / 2 }, this.renderer.state.camera);
     this.interaction.editText(createElement('text', { ...this.styles, ...point, groupPath: this.renderer.state.groupScope?.slice(), text: text.slice(0, 100000), w: 400, h: 60 }), true);
     this.interaction.finishEditing();

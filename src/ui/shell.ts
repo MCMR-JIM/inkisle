@@ -50,6 +50,13 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       </div>
     </aside>
     <div id="selection-status" class="visually-hidden" role="status" hidden><span id="selection-label"></span></div>
+    ${floatingBarMarkup({ id: 'capture-actions', label: '截取操作', className: 'context-toolbar', layout: 'compact', spaceActivates: true, items: [
+      { type: 'option', label: '闭合区域', icon: 'polygon', tooltip: '闭合区域（Enter）', attributes: { 'data-capture-action': 'finish' } },
+      { type: 'option', label: '复制区域', icon: 'duplicate', attributes: { 'data-capture-action': 'copy' } },
+      { type: 'option', label: '生成对象', icon: 'image', attributes: { 'data-capture-action': 'insert' } },
+      { type: 'separator' },
+      { type: 'option', label: '取消', icon: 'close', attributes: { 'data-capture-action': 'cancel' } },
+    ], contentAfter: '<span id="capture-status" class="visually-hidden" role="status"></span>' })}
     ${floatingBarMarkup({ id: 'selection-toolbar', label: '选区操作', className: 'selection-toolbar', layout: 'compact', spaceActivates: true, items: [
       { type: 'option', label: '组合', attributes: { id: 'group-button' } },
       { type: 'option', label: '解组', attributes: { id: 'ungroup-button' } },

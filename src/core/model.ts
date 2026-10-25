@@ -1,5 +1,5 @@
 export type ElementKind = 'pen' | 'rect' | 'roundrect' | 'ellipse' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'arrow' | 'bidirectional-arrow' | 'line' | 'text' | 'note' | 'image' | 'path' | 'paper';
-export type Tool = Exclude<ElementKind, 'path' | 'paper'> | 'select' | 'hand' | 'eraser' | 'recognize';
+export type Tool = Exclude<ElementKind, 'path' | 'paper'> | 'select' | 'hand' | 'eraser' | 'recognize' | 'capture';
 export interface Point { x: number; y: number; pressure?: number }
 export interface Bounds { x: number; y: number; w: number; h: number }
 export interface Camera { x: number; y: number; zoom: number }
