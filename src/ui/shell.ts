@@ -29,6 +29,7 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
         ${button('theme-button', 'moon', '切换主题')}
         ${button('workspace-settings-button', 'settings', '工作区设置')}
         <button id="library-button" class="button button-subtle" aria-label="我的画板">${icon('library', 17)}<span>我的画板</span></button>
+        <button id="import-button" class="button button-subtle" data-action="import" data-tooltip="导入画板文件或 PDF">${icon('import', 17)}<span>导入</span></button>
         <button id="export-button" class="button button-primary">${icon('export', 17)}<span>导出</span>${icon('chevron', 14)}</button>
       </div>
     </header>
@@ -40,7 +41,7 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
     <aside id="properties" class="properties panel" aria-label="样式设置">
       <div class="panel-heading"><span>${icon('settings', 16)}<span id="property-title">样式设置</span></span><button id="collapse-properties" class="tiny-button" aria-label="收起样式">${icon('minus', 15)}</button></div>
       <div id="property-content">
-        <div class="property-group"><div class="color-group-heading"><span id="stroke-label">描边</span><button id="stroke-palette" class="palette-button" type="button" aria-label="描边调色板" aria-pressed="false">${icon('palette', 16)}</button></div><div class="swatches" id="stroke-colors" role="group" aria-labelledby="stroke-label">${swatches(palettes.stroke, 'stroke')}</div></div>
+        <div class="property-group"><div class="color-group-heading"><span id="stroke-label">颜色</span><button id="stroke-palette" class="palette-button" type="button" aria-label="描边调色板" aria-pressed="false">${icon('palette', 16)}</button></div><div class="swatches" id="stroke-colors" role="group" aria-labelledby="stroke-label">${swatches(palettes.stroke, 'stroke')}</div></div>
         <div class="property-group"><div class="color-group-heading"><span id="fill-label">填充</span><div class="fill-heading-actions">${toggleSwitchMarkup('fill-toggle', 'fill-label', false, '关闭填充显示透明，开启填充使用选中的颜色')}<button id="fill-palette" class="palette-button" type="button" aria-label="填充调色板" aria-pressed="false">${icon('palette', 16)}</button></div></div><div class="swatches" id="fill-colors" role="group" aria-labelledby="fill-label">${swatches(palettes.fill, 'fill')}</div></div>
         <div class="property-group"><label>线条粗细</label><div class="segmented" id="stroke-widths">${[1, 2, 4, 7].map(w => `<button data-width="${w}" aria-label="线宽 ${w}" class="${w === 2 ? 'active' : ''}"><span style="height:${Math.min(w, 5)}px"></span></button>`).join('')}</div></div>
         <div class="property-group property-row"><label>线条样式</label><div class="mini-segmented"><button data-dash="false" class="active" aria-label="实线">━</button><button data-dash="true" aria-label="虚线">┄</button></div></div>
@@ -50,6 +51,13 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
       </div>
     </aside>
     <div id="selection-status" class="visually-hidden" role="status" hidden><span id="selection-label"></span></div>
+    ${floatingBarMarkup({ id: 'capture-actions', label: '截取操作', className: 'context-toolbar', layout: 'compact', spaceActivates: true, items: [
+      { type: 'option', label: '闭合区域', icon: 'polygon', tooltip: '闭合区域（Enter）', attributes: { 'data-capture-action': 'finish' } },
+      { type: 'option', label: '复制区域', icon: 'duplicate', attributes: { 'data-capture-action': 'copy' } },
+      { type: 'option', label: '生成对象', icon: 'image', attributes: { 'data-capture-action': 'insert' } },
+      { type: 'separator' },
+      { type: 'option', label: '取消', icon: 'close', attributes: { 'data-capture-action': 'cancel' } },
+    ], contentAfter: '<span id="capture-status" class="visually-hidden" role="status"></span>' })}
     ${floatingBarMarkup({ id: 'selection-toolbar', label: '选区操作', className: 'selection-toolbar', layout: 'compact', spaceActivates: true, items: [
       { type: 'option', label: '组合', attributes: { id: 'group-button' } },
       { type: 'option', label: '解组', attributes: { id: 'ungroup-button' } },

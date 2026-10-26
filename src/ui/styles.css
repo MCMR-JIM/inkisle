@@ -207,7 +207,7 @@ dialog { color: var(--ink); border: 1px solid var(--border); background: var(--s
 .new-board-document > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 #new-board-pages label { display: block; margin-bottom: 10px; }
 .group-navigation .button { padding: 6px 8px; font-size: 10px; white-space: nowrap; }
-.selection-toolbar { position: fixed; z-index: 7; }
+.selection-toolbar, .context-toolbar { position: fixed; z-index: 7; }
 .selection-alignment-menu { position: fixed; z-index: 8; }
 .library-search { display: flex; gap: 10px; padding: 0 32px 20px; }
 .library-search input { flex: 1; min-width: 0; }

@@ -7,6 +7,7 @@ import { isLinearElement, lineEndpointAt, lineEndpoints, lineRotationHandle } fr
 import { SELECTION_GAP, selectionFrame, objectRotationHandle, type CornerHandle } from '../core/selection-frame';
 import { inScope, selectedUnits } from '../core/groups';
 import { eraserRadius } from '../core/eraser';
+import type { CaptureRegion } from '../core/capture';
 
 export type Handle = CornerHandle | 'start' | 'end' | 'rotate';
 export interface RenderState {
@@ -22,6 +23,7 @@ export interface RenderState {
   erasing: Map<string, BoardElement>;
   eraserSize: number;
   groupScope?: string[];
+  capture?: CaptureRegion;
 }
 
 export class Renderer {
@@ -223,6 +225,17 @@ export class Renderer {
     else for (const el of this.state.preview) drawElement(ctx, el, true, this.state.camera.zoom, this.state.dark);
     const b = this.selectionBounds();
     const zoom = this.state.camera.zoom;
+    const capture = this.state.tool === 'capture' ? this.state.capture : undefined;
+    if (capture?.points.length) {
+      ctx.save(); ctx.lineWidth = 1.5 / zoom; ctx.strokeStyle = this.state.dark ? '#b4d9c2' : '#315c49';
+      ctx.fillStyle = '#7aa88b22'; ctx.setLineDash([6 / zoom, 4 / zoom]);
+      ctx.beginPath(); capture.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      if (capture.closed) { ctx.closePath(); ctx.fill('evenodd'); }
+      else if (capture.cursor) ctx.lineTo(capture.cursor.x, capture.cursor.y);
+      ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = this.state.dark ? '#24382d' : '#fff';
+      for (const p of capture.points) { ctx.beginPath(); ctx.arc(p.x, p.y, 4 / zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      ctx.restore();
+    }
     if (b && this.state.tool === 'select') {
       const elements = this.state.preview.length && this.state.hidden.size
         ? this.state.preview : [...this.state.selected].map(id => this.scene.get(id)).filter((el): el is BoardElement => !!el);
