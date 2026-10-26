@@ -128,3 +128,19 @@ test('both pen modes remain accessible beside top and bottom toolbars at desktop
     }
   }
 });
+
+test('line width presets stay inert while the highlighter is active', async ({ page }) => {
+  await blank(page);
+  await page.locator('[data-width="4"]').click();
+  await page.getByRole('button', { name: '荧光笔', exact: true }).click();
+  for (const width of [1, 2, 4, 7]) await expect(page.locator(`[data-width="${width}"]`)).toBeDisabled();
+  await expect(page.locator('[data-width].active')).toHaveCount(0);
+  await page.locator('[data-width="7"]').dispatchEvent('click');
+  await draw(page, 320);
+  expect((await read(page))[0].strokeWidth).toBe(20);
+  await page.getByRole('button', { name: '普通画笔', exact: true }).click();
+  await expect(page.locator('[data-width="4"]')).toBeEnabled();
+  await expect(page.locator('[data-width="4"]')).toHaveClass(/active/);
+  await draw(page, 420);
+  expect((await read(page))[1].strokeWidth).toBe(4);
+});

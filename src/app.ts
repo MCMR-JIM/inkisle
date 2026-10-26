@@ -304,7 +304,7 @@ export class App {
         else this.changeStyle({ stroke: color.dataset.color! });
       }
       const width = target.closest<HTMLElement>('[data-width]')?.dataset.width;
-      if (width) this.changeStyle({ strokeWidth: +width });
+      if (width) { if (!this.highlighterActive()) this.changeStyle({ strokeWidth: +width }); }
       const dash = target.closest<HTMLElement>('[data-dash]')?.dataset.dash;
       if (dash) this.changeStyle({ dash: dash === 'true' });
       const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
@@ -395,6 +395,9 @@ export class App {
     this.interaction?.updateCursor(); this.renderer.invalidate(false); this.selectionChanged();
   }
 
+  /** 荧光笔使用固定的宽扁笔触，样式面板的线宽预设不该改变它。 */
+  private highlighterActive(): boolean { return this.renderer.state.tool === 'pen' && this.penMode === 'highlighter'; }
+
   private syncPenProfile(highlighter: boolean): void {
     if (highlighter && !this.ordinaryPenStyle) {
       this.ordinaryPenStyle = penStyle(this.styles); Object.assign(this.styles, this.highlighterStyle);
@@ -473,13 +476,17 @@ export class App {
     $<HTMLButtonElement>('#fill-toggle').disabled = !!elements.length && elements.every(el => el.locked);
     this.renderToolMenus();
     $('#pressure-toggle').setAttribute('aria-checked', String(first ? !!first.pressureEnabled : this.styles.pressureEnabled !== false));
-    $<HTMLButtonElement>('#pressure-toggle').disabled = (!!elements.length && elements.every(el => el.locked)) || (this.renderer.state.tool === 'pen' && this.penMode === 'highlighter');
+    $<HTMLButtonElement>('#pressure-toggle').disabled = (!!elements.length && elements.every(el => el.locked)) || this.highlighterActive();
     document.querySelectorAll<HTMLElement>('[data-color-index]').forEach(button => {
       const active = button.dataset.color === (button.dataset.property === 'fill' ? fillColor : style.stroke); button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
     });
     this.colorPickers.stroke.setValue(style.stroke ?? '#283e36');
     this.colorPickers.fill.setValue(fillColor);
-    document.querySelectorAll<HTMLElement>('[data-width]').forEach(button => button.classList.toggle('active', +button.dataset.width! === style.strokeWidth));
+    const highlighterActive = this.highlighterActive();
+    document.querySelectorAll<HTMLButtonElement>('[data-width]').forEach(button => {
+      button.classList.toggle('active', !highlighterActive && +button.dataset.width! === style.strokeWidth);
+      button.disabled = highlighterActive;
+    });
     document.querySelectorAll<HTMLElement>('[data-dash]').forEach(button => button.classList.toggle('active', button.dataset.dash === String(style.dash)));
     $<HTMLInputElement>('#opacity').value = String(Math.round((style.opacity ?? 1) * 100));
     $('#opacity-value').textContent = `${Math.round((style.opacity ?? 1) * 100)}%`;
