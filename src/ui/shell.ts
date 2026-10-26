@@ -29,6 +29,7 @@ export function buildShell(root: HTMLElement, palettes = { stroke: COLORS, fill:
         ${button('theme-button', 'moon', '切换主题')}
         ${button('workspace-settings-button', 'settings', '工作区设置')}
         <button id="library-button" class="button button-subtle" aria-label="我的画板">${icon('library', 17)}<span>我的画板</span></button>
+        <button id="import-button" class="button button-subtle" data-action="import" data-tooltip="导入画板文件或 PDF">${icon('import', 17)}<span>导入</span></button>
         <button id="export-button" class="button button-primary">${icon('export', 17)}<span>导出</span>${icon('chevron', 14)}</button>
       </div>
     </header>
