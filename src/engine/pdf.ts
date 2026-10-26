@@ -2,7 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { BoardDocument, BoardElement } from '../core/model';
 import { elementBounds, intersects, unionBounds } from '../core/geometry';
-import { createPaper, fitPaperSource, paperPages, paperPositions, parsePageRange } from '../core/paper';
+import { createPaper, fitPaperSource, paperPages, paperPositions, parsePageRange, paperRotation } from '../core/paper';
 export { parsePageRange } from '../core/paper';
 import { pdfAssets, MAX_PDF_BYTES } from '../storage/assets';
 import { setPaperRenderer } from './paper-render';
@@ -51,15 +51,16 @@ export function activatePdf(invalidator: () => void): void {
 
 function keyFor(page: BoardElement, zoom: number): string {
   const width = Math.max(64, Math.min(2048, 2 ** Math.ceil(Math.log2(Math.max(1, page.w * zoom)))));
-  return `${page.paper!.sourceId}:${page.paper!.sourcePage}:${width}`;
+  return `${page.paper!.sourceId}:${page.paper!.sourcePage}:${page.paper!.sourceRotation ?? 0}:${width}`;
 }
 
 async function renderPage(page: BoardElement, width: number): Promise<Preview> {
   const doc = await openPdf(page.paper!.sourceId!);
   const pdfPage = await doc.getPage(page.paper!.sourcePage!);
-  const natural = pdfPage.getViewport({ scale: 1 });
+  const rotation = paperRotation(pdfPage.rotate + (page.paper?.sourceRotation ?? 0));
+  const natural = pdfPage.getViewport({ scale: 1, rotation });
   const scale = Math.min(width / natural.width, 2048 / Math.max(natural.width, natural.height), Math.sqrt(1500000 / (natural.width * natural.height)));
-  const viewport = pdfPage.getViewport({ scale });
+  const viewport = pdfPage.getViewport({ scale, rotation });
   const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.ceil(viewport.width)); canvas.height = Math.max(1, Math.ceil(viewport.height));
   try { await pdfPage.render({ canvas, viewport }).promise; }
   catch (error) { canvas.width = canvas.height = 0; throw error; }
@@ -90,7 +91,7 @@ function requestPage(page: BoardElement, zoom: number): Promise<Preview> {
 function paint(ctx: CanvasRenderingContext2D, page: BoardElement, zoom: number, request: boolean): void {
   if (!page.paper?.sourceId) return;
   const ratio = Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1), key = keyFor(page, zoom * ratio);
-  const match = cache.get(key) ?? [...cache.entries()].find(([k]) => k.startsWith(`${page.paper!.sourceId}:${page.paper!.sourcePage}:`))?.[1];
+  const match = cache.get(key) ?? [...cache.entries()].find(([k]) => k.startsWith(`${page.paper!.sourceId}:${page.paper!.sourcePage}:${page.paper!.sourceRotation ?? 0}:`))?.[1];
   if (match) {
     const b = fitPaperSource(page, match.width, match.height); ctx.drawImage(match.canvas, b.x, b.y, b.w, b.h);
     if (cache.has(key)) { cache.delete(key); cache.set(key, match); }
@@ -115,8 +116,30 @@ export async function inspectPdf(file: File): Promise<{ id: string; count: numbe
   catch (error) { documentId = ''; documentPromise = null; throw new Error(error instanceof Error && error.name === 'PasswordException' ? 'PDF 需要密码，请先解锁后导入' : `PDF 无法打开：${error instanceof Error ? error.message : String(error)}`); }
 }
 
-export function importedPages(id: string, pages: number[], x: number, y: number): BoardElement[] {
-  return paperPositions(pages.map(number => createPaper(0, 0, id, number)), 'single', { x, y });
+export async function importedPages(id: string, pages: number[], x: number, y: number, rotation = 0): Promise<BoardElement[]> {
+  return enqueue(async () => {
+    const doc = await openPdf(id), result: BoardElement[] = [];
+    for (const number of pages) {
+      const source = await doc.getPage(number), viewport = source.getViewport({ scale: 1, rotation: paperRotation(source.rotate + rotation) });
+      const landscape = viewport.width > viewport.height;
+      const page = createPaper(0, 0, id, number);
+      if (landscape) [page.w, page.h] = [page.h, page.w];
+      if (rotation) page.paper!.sourceRotation = paperRotation(rotation);
+      result.push(page);
+    }
+    return paperPositions(result, 'single', { x, y });
+  });
+}
+
+/** Small, uncached dialog preview; callers release the returned surface after painting it. */
+export async function previewPdfPage(id: string, number: number, rotation: number, signal: AbortSignal): Promise<HTMLCanvasElement> {
+  return enqueue(async () => {
+    signal.throwIfAborted();
+    const page = createPaper(0, 0, id, number); page.paper!.sourceRotation = rotation;
+    const preview = await renderPage(page, 320);
+    if (signal.aborted) { preview.canvas.width = preview.canvas.height = 0; signal.throwIfAborted(); }
+    return preview.canvas;
+  });
 }
 
 export async function exportPdf(doc: BoardDocument, range: string, signal: AbortSignal, progress: (completed: number, total: number) => void): Promise<Blob> {
@@ -132,8 +155,9 @@ export async function exportPdf(doc: BoardDocument, range: string, signal: Abort
   for (const index of indices) {
     signal.throwIfAborted();
     const paper = pages[index - 1], bounds = elementBounds(paper);
-    const outputPage = output.addPage([595.28, 841.89]);
-    const fit = Math.min(595.28 / bounds.w, 841.89 / bounds.h), ox = (595.28 - bounds.w * fit) / 2, oy = (841.89 - bounds.h * fit) / 2;
+    const [outputW, outputH] = paper.w > paper.h ? [841.89, 595.28] : [595.28, 841.89];
+    const outputPage = output.addPage([outputW, outputH]);
+    const fit = Math.min(outputW / bounds.w, outputH / bounds.h), ox = (outputW - bounds.w * fit) / 2, oy = (outputH - bounds.h * fit) / 2;
     outputPage.drawRectangle({ x: ox, y: oy, width: bounds.w * fit, height: bounds.h * fit, color: lib.rgb(248 / 255, 249 / 255, 246 / 255) });
     const paperBox = { x: ox + (paper.x - bounds.x) * fit, y: oy + (bounds.y + bounds.h - paper.y - paper.h) * fit, width: paper.w * fit, height: paper.h * fit };
     outputPage.drawRectangle({ ...paperBox, color: lib.rgb(1, 1, 1) });
@@ -141,7 +165,7 @@ export async function exportPdf(doc: BoardDocument, range: string, signal: Abort
       const id = paper.paper.sourceId;
       if (!originals.has(id)) originals.set(id, await lib.PDFDocument.load(await (await pdfAssets.get(id)).arrayBuffer()));
       const original = originals.get(id)!.getPage(paper.paper.sourcePage! - 1), crop = original.getCropBox();
-      const rotation = ((original.getRotation().angle % 360) + 360) % 360;
+      const rotation = paperRotation(original.getRotation().angle + (paper.paper.sourceRotation ?? 0));
       const naturalW = rotation % 180 ? crop.height : crop.width, naturalH = rotation % 180 ? crop.width : crop.height;
       const target = fitPaperSource(paper, naturalW, naturalH);
       const x = ox + (target.x - bounds.x) * fit, y = oy + (bounds.y + bounds.h - target.y - target.h) * fit;

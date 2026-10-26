@@ -1,6 +1,7 @@
 import { createDocument, type BoardDocument, type PageLayout } from '../core/model';
 import { createPaper, paperPositions, parsePageRange } from '../core/paper';
 import { CustomSelect } from './custom-select';
+import { PdfOrientation } from './pdf-orientation';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -10,8 +11,10 @@ export class BoardCreation {
   private generation = 0;
   private creating = false;
   private reading = false;
+  private orientation: PdfOrientation;
 
   constructor(private create: (doc: BoardDocument) => Promise<boolean>) {
+    this.orientation = new PdfOrientation('new-board-orientation', $('new-board-page-range'));
     this.layout = new CustomSelect($<HTMLButtonElement>('new-board-layout'), [
       { value: 'infinite', label: '无限画布（不分页）' },
       { value: 'single', label: '单页连续' },
@@ -23,7 +26,7 @@ export class BoardCreation {
     $('new-board-form').addEventListener('submit', event => { event.preventDefault(); void this.confirm(); });
     const dialog = $<HTMLDialogElement>('new-board-dialog');
     dialog.addEventListener('cancel', event => { if (this.creating) event.preventDefault(); });
-    dialog.addEventListener('close', () => { this.generation++; this.source = null; $<HTMLInputElement>('new-board-document').value = ''; });
+    dialog.addEventListener('close', () => { this.generation++; this.source = null; this.orientation.clear(); $<HTMLInputElement>('new-board-document').value = ''; });
   }
 
   open(): void {
@@ -33,6 +36,7 @@ export class BoardCreation {
   }
 
   private clearDocument(): void {
+    this.orientation.clear();
     this.generation++; this.source = null; this.reading = false;
     $<HTMLInputElement>('new-board-document').value = '';
     $('new-board-document-name').textContent = '不导入文档';
@@ -44,6 +48,7 @@ export class BoardCreation {
   private async readDocument(): Promise<void> {
     const file = $<HTMLInputElement>('new-board-document').files?.[0]; if (!file) return;
     const token = ++this.generation; this.reading = true; this.source = null;
+    this.orientation.clear();
     $('new-board-document-name').textContent = file.name; $('new-board-clear-document').hidden = false;
     $('new-board-status').textContent = '正在读取文档…'; $('new-board-pages').hidden = true;
     $<HTMLButtonElement>('confirm-new-board').disabled = true;
@@ -56,6 +61,7 @@ export class BoardCreation {
       $('new-board-pages').hidden = false;
       $<HTMLInputElement>('new-board-page-range').value = `1-${source.count}`;
       $('new-board-document-name').textContent = `${file.name} · ${source.count} 页`; $('new-board-status').textContent = '';
+      this.orientation.load(source);
     } catch (error) {
       if (token === this.generation) $('new-board-status').textContent = error instanceof Error ? error.message : String(error);
     } finally {
@@ -70,6 +76,7 @@ export class BoardCreation {
     $<HTMLDialogElement>('new-board-dialog').dataset.busy = 'true';
     const button = $<HTMLButtonElement>('confirm-new-board'), close = $<HTMLButtonElement>('new-board-close');
     button.disabled = close.disabled = true; this.layout.setDisabled(true);
+    this.orientation.setDisabled(true);
     for (const id of ['new-board-document-button', 'new-board-clear-document']) $<HTMLButtonElement>(id).disabled = true;
     try {
       const source = this.source, mode = this.layout.value;
@@ -77,13 +84,14 @@ export class BoardCreation {
       if (source) {
         const pages = parsePageRange($<HTMLInputElement>('new-board-page-range').value, source.count);
         const pdf = await import('../engine/pdf');
-        doc.elements = pdf.importedPages(source.id, pages, 300, 120);
+        doc.elements = await pdf.importedPages(source.id, pages, 300, 120, this.orientation.rotation);
       } else if (mode !== 'infinite') doc.elements = [createPaper()];
       if (doc.elements.length) doc.elements = paperPositions(doc.elements, mode === 'double' ? 'double' : 'single', { x: 300, y: 120 });
       if (await this.create(doc)) $<HTMLDialogElement>('new-board-dialog').close();
     } catch (error) { $('new-board-status').textContent = error instanceof Error ? error.message : String(error); }
     finally {
       this.creating = false; button.disabled = close.disabled = false; this.layout.setDisabled(false);
+      this.orientation.setDisabled(false);
       delete $<HTMLDialogElement>('new-board-dialog').dataset.busy;
       for (const id of ['new-board-document-button', 'new-board-clear-document']) $<HTMLButtonElement>(id).disabled = false;
     }

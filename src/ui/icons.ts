@@ -1,4 +1,6 @@
 const paths: Record<string, string> = {
+  rotateLeft: '<path d="M3 10a9 9 0 1 1 3 9M3 4v6h6"/>',
+  rotateRight: '<path d="M21 10a9 9 0 1 0-3 9m3-15v6h-6"/>',
   capture: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 7h10v10H7Z"/>',
   polygon: '<path d="m5 5 14 3-2 12-13-5Z"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="8" r="2"/><circle cx="17" cy="20" r="2"/><circle cx="4" cy="15" r="2"/>',
   paperPlus: '<path d="M14 3H5v18h14V8Z"/><path d="M14 3v5h5M8 14h8m-4-4v8"/>',

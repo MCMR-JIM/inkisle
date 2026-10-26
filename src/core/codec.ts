@@ -70,6 +70,7 @@ export function validateDocument(input: unknown): asserts input is BoardDocument
       assert(el.kind === 'paper' && el.paper && finite(el.paper.margin, 500) && el.paper.margin >= 0);
       assert(el.w > 0 && el.h > 0 && !el.rotation && el.locked && !el.groupPath?.length && !el.erasures?.length);
       assert(el.paper.sourceId === undefined && el.paper.sourcePage === undefined || typeof el.paper.sourceId === 'string' && /^[a-f0-9]{64}$/.test(el.paper.sourceId) && Number.isSafeInteger(el.paper.sourcePage) && el.paper.sourcePage! > 0 && el.paper.sourcePage! <= 5000);
+      assert(el.paper.sourceRotation === undefined || !!el.paper.sourceId && [0, 90, 180, 270].includes(el.paper.sourceRotation));
     }
     assert(el.pressureEnabled === undefined || typeof el.pressureEnabled === 'boolean');
     assert(Array.isArray(el.points));

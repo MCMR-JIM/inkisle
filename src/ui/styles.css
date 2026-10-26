@@ -206,6 +206,13 @@ dialog { color: var(--ink); border: 1px solid var(--border); background: var(--s
 .new-board-document > button { flex-shrink: 0; }
 .new-board-document > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 #new-board-pages label { display: block; margin-bottom: 10px; }
+.pdf-orientation { display: grid; gap: 10px; }
+.pdf-preview { height: 170px; display: grid; place-items: center; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+.pdf-preview canvas { max-width: 100%; max-height: 152px; width: auto; height: auto; background: #fff; }
+.pdf-preview > span { font-size: 11px; color: var(--label); }
+.pdf-preview > span:empty { display: none; }
+.pdf-preview-navigation { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 11px; color: var(--label); }
+.pdf-orientation .pdf-orientation-hint { color: var(--label); font-size: 11px; line-height: 1.5; }
 .group-navigation .button { padding: 6px 8px; font-size: 10px; white-space: nowrap; }
 .selection-toolbar, .context-toolbar { position: fixed; z-index: 7; }
 .selection-alignment-menu { position: fixed; z-index: 8; }
