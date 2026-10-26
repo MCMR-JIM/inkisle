@@ -50,15 +50,15 @@ function penPath(points: Point[]): Path2D {
   return path;
 }
 
-export function drawElement(ctx: CanvasRenderingContext2D, el: BoardElement, preview = false, zoom = 1, dark = false): void {
+export function drawElement(ctx: CanvasRenderingContext2D, el: BoardElement, preview = false, zoom = 1, dark = false, effects = true): void {
   if (el.erasures?.length) {
-    drawMaskedElement(ctx, el, layer => drawUnmaskedElement(layer, el, preview, zoom, dark));
+    drawMaskedElement(ctx, el, layer => drawUnmaskedElement(layer, el, preview, zoom, dark, effects));
     return;
   }
-  drawUnmaskedElement(ctx, el, preview, zoom, dark);
+  drawUnmaskedElement(ctx, el, preview, zoom, dark, effects);
 }
 
-function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, preview: boolean, zoom: number, dark: boolean): void {
+function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, preview: boolean, zoom: number, dark: boolean, effects: boolean): void {
   ctx.save();
   ctx.globalAlpha = el.opacity;
   const ink = dark && el.fill === 'transparent' ? darkInk(el.stroke) : el.stroke;
@@ -152,7 +152,7 @@ function drawUnmaskedElement(ctx: CanvasRenderingContext2D, el: BoardElement, pr
     } else ctx.roundRect(b.x, b.y, b.w, b.h, el.kind === 'rect' ? 0 : Math.min(el.kind === 'note' ? 3 : el.radius, b.w / 2, b.h / 2));
     if (el.kind === 'note') {
       if (el.fill !== 'transparent') {
-        if (zoom > 0.35) { ctx.shadowColor = '#29372b12'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5; }
+        if (effects && zoom > 0.35) { ctx.shadowColor = '#29372b12'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 5; }
         ctx.fill(); ctx.shadowColor = 'transparent';
         ctx.fillStyle = '#ffffff25'; ctx.fillRect(b.x, b.y, b.w, 25);
       }

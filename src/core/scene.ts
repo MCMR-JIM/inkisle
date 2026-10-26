@@ -57,7 +57,8 @@ export class Scene {
     const updates = new Map<string, Change[]>();
     for (const { source, parts } of replacements) {
       if (!undone && this.items.get(source.id) !== source) continue;
-      const next: Change[] = parts.length ? parts.map(after => ({ id: after.id, after })) : [{ id: source.id, after: null }];
+      const next: Change[] = parts.map(after => ({ id: after.id, after }));
+      if (!parts.some(part => part.id === source.id)) next.unshift({ id: source.id, after: null });
       changes.push(...next); updates.set(source.id, next);
       for (const part of parts) if (part.id !== source.id) transaction.before.push({ id: part.id, after: null });
     }

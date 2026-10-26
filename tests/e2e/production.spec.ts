@@ -14,6 +14,19 @@ async function downloadBoard(page: Page) {
   return decodeDocument(bytes.subarray(8 + size, 8 + size + manifest.documentBytes));
 }
 
+test('production erasure removes invisible text objects and preserves undo, redo and persistence', async ({ page }) => {
+  await page.goto('/'); await createBoard(page);
+  await page.locator('#board-title').fill('Erasure regression'); await page.keyboard.press('Enter');
+  await page.keyboard.press('t'); await page.mouse.click(500, 300); await page.locator('#text-editor').fill('Erase me'); await page.keyboard.press('Control+Enter');
+  const original = (await downloadBoard(page)).elements;
+  await page.keyboard.press('e'); await page.locator('#eraser-size').fill('120');
+  await page.mouse.move(480, 320); await page.mouse.down(); await page.mouse.move(680, 320, { steps: 10 }); await page.mouse.up();
+  await expect(page.locator('#element-count')).toHaveText('0 个元素'); expect((await downloadBoard(page)).elements).toHaveLength(0);
+  await page.keyboard.press('Control+z'); expect((await downloadBoard(page)).elements).toEqual(original);
+  await page.keyboard.press('Control+Shift+z'); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await expect(page.locator('#save-status[data-state="saved"]')).toBeVisible(); await page.reload(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+});
+
 test('production PDF orientation preview, page rotation and landscape export survive reload', async ({ page }) => {
   await page.goto('/'); await createBoard(page);
   await page.locator('#import-file').setInputFiles({ name: 'orientation.pdf', mimeType: 'application/pdf', buffer: await orientationFixture() });
