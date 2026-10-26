@@ -1,3 +1,4 @@
+import { createBoard } from './helpers';
 import { expect, test } from '@playwright/test';
 
 async function readElements(page: import('@playwright/test').Page): Promise<any[]> {
@@ -11,7 +12,7 @@ async function readElements(page: import('@playwright/test').Page): Promise<any[
 
 test('a selected line exposes endpoints and rotating handle instead of corner resize handles', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.locator('[data-family="lines"]').click();
   await page.locator('[data-tool-child="line"]').click();
   await page.mouse.move(500, 350); await page.mouse.down(); await page.mouse.move(800, 450); await page.mouse.up();
@@ -28,7 +29,7 @@ test('a selected line exposes endpoints and rotating handle instead of corner re
 
 test('dragging an endpoint preserves the other endpoint and Shift snaps to 45 degrees', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.locator('[data-family="lines"]').click(); await page.locator('[data-tool-child="line"]').click();
   await page.mouse.move(500, 350); await page.mouse.down(); await page.mouse.move(800, 450); await page.mouse.up();
   const before = await readElements(page); const original = before[0];
@@ -42,7 +43,7 @@ test('dragging an endpoint preserves the other endpoint and Shift snaps to 45 de
 });
 
 test('a line rotation stem follows the pointer below the object and survives undo, source round-trip and reopening', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   await page.locator('[data-family="lines"]').click();
   await page.mouse.move(500, 400); await page.mouse.down(); await page.mouse.move(800, 400); await page.mouse.up();
   expect((await readElements(page))[0].rotationHandleSide).toBe(1);
@@ -69,7 +70,7 @@ test('a line rotation stem follows the pointer below the object and survives und
 
 test('Shift rotation snaps a polygon to 15 degrees and survives refresh', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await page.locator('[data-family="shapes"]').click(); await page.locator('[data-tool-child="pentagon"]').click();
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 450); await page.mouse.up();
   const before = (await readElements(page))[0];

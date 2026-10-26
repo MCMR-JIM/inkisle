@@ -1,8 +1,9 @@
-export type ElementKind = 'pen' | 'rect' | 'roundrect' | 'ellipse' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'arrow' | 'bidirectional-arrow' | 'line' | 'text' | 'note' | 'image' | 'path';
-export type Tool = Exclude<ElementKind, 'path'> | 'select' | 'hand' | 'eraser' | 'recognize';
+export type ElementKind = 'pen' | 'rect' | 'roundrect' | 'ellipse' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'arrow' | 'bidirectional-arrow' | 'line' | 'text' | 'note' | 'image' | 'path' | 'paper';
+export type Tool = Exclude<ElementKind, 'path' | 'paper'> | 'select' | 'hand' | 'eraser' | 'recognize';
 export interface Point { x: number; y: number; pressure?: number }
 export interface Bounds { x: number; y: number; w: number; h: number }
 export interface Camera { x: number; y: number; zoom: number }
+export type PageLayout = 'infinite' | 'single' | 'double';
 /** Element-local swept ellipses. Separate radii preserve non-uniform resizing. */
 export interface Erasure { points: Point[]; radiusX: number; radiusY: number }
 export interface StrokePath { points: Point[]; closed: boolean; pressureEnabled?: boolean }
@@ -38,6 +39,8 @@ export interface BoardElement extends Bounds {
   vertices?: Point[];
   /** Stable group ancestry, ordered from the outermost to the innermost group. */
   groupPath?: string[];
+  /** Fixed paper plus export margin. PDF bytes live once in the asset store. */
+  paper?: { margin: number; sourceId?: string; sourcePage?: number };
 }
 
 export interface BoardDocument {
@@ -47,6 +50,7 @@ export interface BoardDocument {
   updated: number;
   camera: Camera;
   background: string;
+  paperLayout?: PageLayout;
   elements: BoardElement[];
 }
 
@@ -80,7 +84,7 @@ export function createDocument(title = '未命名画板'): BoardDocument {
   const now = Date.now();
   return {
     id: crypto.randomUUID(), title, created: now, updated: now,
-    camera: { x: 0, y: 0, zoom: 1 }, background: '#f8f9f6', elements: [],
+    camera: { x: 0, y: 0, zoom: 1 }, background: '#f8f9f6', paperLayout: 'infinite', elements: [],
   };
 }
 

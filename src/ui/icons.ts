@@ -1,4 +1,6 @@
 const paths: Record<string, string> = {
+  paperPlus: '<path d="M14 3H5v18h14V8Z"/><path d="M14 3v5h5M8 14h8m-4-4v8"/>',
+  arrowLeft: '<path d="M19 12H5m6-6-6 6 6 6"/>',
   select: '<path d="m5 3 14 9-6 1.5L10 20Z"/>',
   hand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v6c0 4-3 6-6 6h-1c-2 0-3-1-4-2l-4-5a1.5 1.5 0 0 1 2-2l2 2"/>',
   pen: '<path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z"/>',

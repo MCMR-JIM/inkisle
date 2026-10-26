@@ -9,6 +9,7 @@ export function normalizeBounds(b: Bounds): Bounds {
 }
 
 export function elementBounds(el: BoardElement): Bounds {
+  if (el.kind === 'paper' && el.paper) return expandBounds(normalizeBounds(el), el.paper.margin);
   let b = normalizeBounds(el);
   if (el.kind === 'pen' && el.points.length) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -72,6 +73,7 @@ function segmentDistanceSq(p: Point, a: Point, b: Point): number {
 }
 
 export function hitTest(el: BoardElement, p: Point, tolerance = 5): boolean {
+  if (el.kind === 'paper') return false;
   if (!contains(expandBounds(elementBounds(el), tolerance), p)) return false;
   if (el.rotation) {
     const local = localPoint(el, p);

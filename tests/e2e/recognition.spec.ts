@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 import { selectionFrame } from '../../src/core/selection-frame';
 import { skewedRectangleTrace } from '../fixtures/recognition-traces';
 
 async function blank(page: Page) {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
 }
 
 async function trace(page: Page, points: { x: number; y: number }[]) {

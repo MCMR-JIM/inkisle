@@ -99,6 +99,7 @@ export class CustomSelect<T extends string | number = number> {
 
   private open(offset = 0): void {
     if (this.trigger.disabled) return;
+    this.trigger.focus({ preventScroll: true });
     CustomSelect.closeOpen?.(); CustomSelect.closeOpen = this.closeSelf;
     this.active = Math.max(0, Math.min(this.options.length - 1, this.options.findIndex(option => option.value === this.current) + offset));
     this.active = this.enabledIndex(this.active, offset < 0 ? -1 : 1);

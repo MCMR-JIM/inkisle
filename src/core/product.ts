@@ -4,6 +4,7 @@ import packageInfo from '../../package.json' with { type: 'json' };
  * stable so the rename cannot orphan existing boards, preferences or files. */
 export const PRODUCT = Object.freeze({
   id: 'inkisle', name: '墨屿', englishName: 'InkIsle', version: packageInfo.version, extension: '.inkisle',
+  runtimeDependencies: Object.keys(packageInfo.dependencies ?? {}).length,
   legacyExtension: '.liubai', database: 'liubai-local-v1', preferencePrefix: 'liubai:',
   clipboardType: 'inkisle-elements', legacyClipboardType: 'liubai-elements',
 });

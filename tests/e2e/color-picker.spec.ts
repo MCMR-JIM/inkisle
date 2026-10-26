@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function blank(page: Page): Promise<void> {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   if (await page.locator('#properties').isHidden()) await page.locator('#expand-properties').click();
 }
 

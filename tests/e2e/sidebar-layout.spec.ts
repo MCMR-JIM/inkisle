@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool, contextAction, selectValue } from './helpers';
+import { createBoard, chooseTool, contextAction, selectValue } from './helpers';
 
 async function centered(page: Page, selector = '#properties'): Promise<void> {
   await expect.poll(async () => {
@@ -10,7 +10,7 @@ async function centered(page: Page, selector = '#properties'): Promise<void> {
 
 test('the style panel stays fixed while pen options open beside the toolbar across viewport sizes', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  await page.locator('#quick-new').click();
+  await createBoard(page);
   for (const viewport of [{ width: 1440, height: 960 }, { width: 1920, height: 1080 }, { width: 1024, height: 720 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(viewport);
     if (await page.locator('#properties').isHidden()) await page.locator('#expand-properties').click();
@@ -33,20 +33,20 @@ test('the style panel stays fixed while pen options open beside the toolbar acro
 });
 
 test('styles scroll inside a centered short panel while object commands remain in the context menu', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click(); await chooseTool(page, '矩形');
+  await page.goto('/'); await createBoard(page); await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(720, 450); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(600, 300); await centered(page);
   await page.setViewportSize({ width: 1024, height: 600 }); await centered(page);
   const scrolling = await page.locator('#property-content').evaluate(el => ({ content: el.scrollHeight, viewport: el.clientHeight, overflow: getComputedStyle(el).overflowY }));
   expect(scrolling.content).toBeGreaterThan(scrolling.viewport); expect(scrolling.overflow).toBe('auto');
   await page.locator('#opacity').scrollIntoViewIfNeeded(); await expect(page.locator('#opacity')).toBeInViewport();
-  const panel = (await page.locator('#properties').boundingBox())!, bottom = (await page.locator('.bottom-left').boundingBox())!;
+  const panel = (await page.locator('#properties').boundingBox())!, bottom = (await page.locator('.bottom-right').boundingBox())!;
   expect(panel.y + panel.height).toBeLessThan(bottom.y);
   await contextAction(page, 'delete'); await expect(page.locator('#element-count')).toHaveText('0 个元素'); await centered(page);
 });
 
 test('opening pen options keeps the style panel and its color picker stationary', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click(); await page.locator('#stroke-palette').click();
+  await page.goto('/'); await createBoard(page); await page.locator('#stroke-palette').click();
   const before = (await page.locator('#properties').boundingBox())!;
   // Keep the picker open while changing the actual tool state.
   await page.locator('[data-family="pen"]').dispatchEvent('click');
@@ -60,7 +60,7 @@ test('opening pen options keeps the style panel and its color picker stationary'
 });
 
 test('pen options follow toolbar placement and open from the keyboard without changing the sidebar', async ({ page }) => {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   const before = await page.locator('#properties').boundingBox();
   for (const position of ['top', 'bottom']) {
     await page.locator('#workspace-settings-button').click(); await selectValue(page, '#toolbar-position', position);

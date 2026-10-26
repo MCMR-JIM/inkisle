@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function setup(page: Page): Promise<void> {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '矩形'); await page.locator('[data-property="fill"][data-color="#e6eee5"]').click();
   await page.locator('#fill-toggle').click();
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(800, 500); await page.mouse.up();

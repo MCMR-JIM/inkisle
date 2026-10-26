@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 import type { BoardElement } from '../../src/core/model';
 
 async function setup(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await createBoard(page);
   await chooseTool(page, '画笔'); await page.locator('[data-width="7"]').click();
 }
 

@@ -1,9 +1,9 @@
-import { selectValue } from './helpers';
+import { createBoard, selectValue } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 import type { BoardElement } from '../../src/core/model';
 
 async function blank(page: Page) {
-  await page.goto('/'); await page.locator('#quick-new').click();
+  await page.goto('/'); await createBoard(page);
   await expect(page.locator('#board-title')).toHaveValue('未命名画板');
   await expect(page.locator('#save-status')).toHaveAttribute('data-state', 'draft');
   await page.keyboard.press('p');

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool, selectValue } from './helpers';
+import { createBoard, chooseTool, selectValue } from './helpers';
 
 test('tool shortcuts reveal the matching family and family shortcuts can be rebound', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
@@ -46,7 +46,7 @@ test('toolbar placement persists, opens options toward the canvas and keeps the 
 
 test('the library supports search, inline rename, sorting and independent board copies', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
   await page.locator('#board-title').fill('Project Alpha'); await page.locator('#board-title').blur();
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(700, 400); await page.mouse.up();

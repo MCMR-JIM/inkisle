@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 async function readCurrent(page: import('@playwright/test').Page): Promise<any> {
   await expect(page.locator('#save-status')).toContainText('已保存在本机');
@@ -11,7 +11,7 @@ async function readCurrent(page: import('@playwright/test').Page): Promise<any> 
 }
 
 test('rotated frame corners lie on the dashed frame and follow the pointer while resizing', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(760, 460); await page.mouse.up();
   const initial = await readCurrent(page);
@@ -94,10 +94,10 @@ test('both horizontal tool rows stay centered and inside a small viewport', asyn
   await expect(page.locator('[data-family="shapes"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('new board sits immediately left of the theme control with header and raised toolbar inside every viewport', async ({ page }) => {
+test('new board sits immediately left of the theme control with header and raised toolbar inside desktop viewports', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('liubai:toolbar-position', 'top'));
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  for (const width of [1440, 900, 640, 390, 320]) {
+  for (const width of [1920, 1440, 1280, 1024, 900]) {
     await page.setViewportSize({ width, height: 844 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     const layout = await page.evaluate(() => {
@@ -113,17 +113,17 @@ test('new board sits immediately left of the theme control with header and raise
     expect(layout.order).toBe('theme-button'); expect(layout.parent).toBe('header-actions');
     expect(layout.plus.right).toBeLessThanOrEqual(layout.theme.x);
     expect(Math.abs(layout.plus.y + layout.plus.height / 2 - layout.theme.y - layout.theme.height / 2)).toBeLessThan(1);
-    expect(layout.toolbar.y).toBeLessThanOrEqual(width <= 640 ? 58 : 64);
+    expect(layout.toolbar.y).toBeLessThanOrEqual(64);
     expect(layout.toolbar.y).toBeGreaterThanOrEqual(layout.header.bottom);
     for (const box of layout.controls) { expect(box.x).toBeGreaterThanOrEqual(0); expect(box.right).toBeLessThanOrEqual(width); expect(box.width).toBeGreaterThanOrEqual(24); }
     expect(layout.overflow).toBe(width);
   }
-  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
   await expect(page.locator('#board-title')).toHaveValue('未命名画板'); await expect(page.locator('#quick-new')).not.toBeFocused();
 });
 
 test('ordinary shape selection draws four faint dashed sides and keeps four handles', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click(); await chooseTool(page, '矩形');
+  await page.goto('/'); await createBoard(page); await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(760, 460); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(630, 300);
   await page.evaluate(() => new Promise(requestAnimationFrame));

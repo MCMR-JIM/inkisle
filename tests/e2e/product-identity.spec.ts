@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 
 test('InkIsle branding and .inkisle exports are consistent, while source files round-trip', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
   await expect(page.locator('#brand-button')).toContainText('墨屿');
   await expect(page).toHaveTitle(/墨屿/);
-  await page.locator('#quick-new').click(); await expect(page.locator('#empty-state h1')).toContainText('墨屿');
+  await createBoard(page); await expect(page.locator('#empty-state h1')).toContainText('墨屿');
   await chooseTool(page, '矩形'); await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(720, 450); await page.mouse.up();
   await page.locator('#board-title').fill('墨屿往返'); await page.locator('#board-title').dispatchEvent('change');
   await expect(page).toHaveTitle('墨屿往返 — 墨屿');
@@ -14,7 +14,7 @@ test('InkIsle branding and .inkisle exports are consistent, while source files r
   expect(file.suggestedFilename()).toBe('墨屿往返.inkisle');
   await page.locator('#import-file').setInputFiles((await file.path())!); await expect(page.locator('#toast')).toContainText('画板已导入');
   await expect(page.locator('#element-count')).toHaveText('1 个元素');
-  await expect(page.locator('#import-file')).toHaveAttribute('accept', '.inkisle,.liubai');
+  await expect(page.locator('#import-file')).toHaveAttribute('accept', '.inkisle,.liubai,.pdf');
   await page.locator('#export-button').click(); await expect(page.locator('[data-action="export-file"]')).toContainText('墨屿源文件');
   await expect(page.locator('[data-action="export-file"]')).toContainText('.inkisle');
   expect(await page.evaluate(() => (window as unknown as { inkisle: unknown; liubai: unknown }).inkisle === (window as unknown as { liubai: unknown }).liubai)).toBe(true);
@@ -33,7 +33,7 @@ test('legacy filename imports and new/old uppercase dropped files keep the same 
   await page.locator('#import-file').setInputFiles({ name: '历史.LIUBAI', mimeType: 'application/octet-stream', buffer: Buffer.from(encoded) });
   await expect(page.locator('#board-title')).toHaveValue('旧文件保留');
   for (const suffix of ['INKISLE', 'LIUBAI']) {
-    await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+    await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
     await page.locator('#workspace').evaluate((element, { bytes, suffix }) => {
       const data = new DataTransfer(); data.items.add(new File([new Uint8Array(bytes)], `画板.${suffix}`, { type: 'application/octet-stream' }));
       element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data, clientX: 800, clientY: 400 }));
@@ -46,7 +46,7 @@ test('existing local preferences, board identity and both clipboard protocols su
   await page.addInitScript(() => { localStorage.setItem('liubai:theme', 'dark'); localStorage.setItem('liubai:pressure', 'false'); });
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.locator('#quick-new').click(); await chooseTool(page, '矩形');
+  await createBoard(page); await chooseTool(page, '矩形');
   await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(720, 450); await page.mouse.up();
   await chooseTool(page, '选择工具'); await page.mouse.click(600, 300);
   await expect(page.locator('#save-status')).toContainText('已保存在本机');

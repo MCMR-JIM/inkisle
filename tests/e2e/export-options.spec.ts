@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { chooseTool, selectValue } from './helpers';
+import { createBoard, chooseTool, selectValue } from './helpers';
 
 test('PNG scope, padding, resolution and transparency match the export preview', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
   await chooseTool(page, '矩形');
   for (const x of [500, 900]) { await page.mouse.move(x, 300); await page.mouse.down(); await page.mouse.move(x + 200, 400); await page.mouse.up(); }
   await chooseTool(page, '选择工具'); await page.mouse.click(600, 300);
@@ -28,7 +28,7 @@ test('PNG scope, padding, resolution and transparency match the export preview',
 
 test('SVG supports transparent export and an empty board cannot start an image export', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#save-status')).toContainText('已保存在本机');
-  await page.locator('#quick-new').click(); await expect(page.locator('#element-count')).toHaveText('0 个元素');
+  await createBoard(page); await expect(page.locator('#element-count')).toHaveText('0 个元素');
   await page.locator('#export-button').click(); await page.locator('[data-action="export-svg"]').click();
   await expect(page.locator('#confirm-export')).toBeDisabled(); await expect(page.locator('#export-dimensions')).toContainText('没有内容');
   await page.getByRole('button', { name: '关闭导出设置', exact: true }).click();

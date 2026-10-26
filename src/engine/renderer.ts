@@ -88,6 +88,7 @@ export class Renderer {
     const visible = this.scene.query(this.viewport());
     this.visibleCount = visible.length;
     this.transform(ctx);
+    this.drawPaperFrames(ctx);
     for (const el of visible) {
       if (this.state.hidden.has(el.id)) continue;
       drawElement(ctx, this.state.erasing.get(el.id) ?? el, false, this.state.camera.zoom, this.state.dark);
@@ -111,7 +112,7 @@ export class Renderer {
    * Editing previews replace their sources instead of floating above all objects.
    */
   private drawLayeredContent(ctx: CanvasRenderingContext2D): void {
-    this.drawBackground(ctx); this.transform(ctx);
+    this.drawBackground(ctx); this.transform(ctx); this.drawPaperFrames(ctx);
     const viewport = this.viewport(), previews = new Map(this.state.preview.map(el => [el.id, el]));
     const objects = new Map<string, BoardElement>();
     for (const source of this.scene.query(viewport)) {
@@ -133,6 +134,15 @@ export class Renderer {
       }
     }
     for (const element of this.state.preview) if (!this.state.hidden.has(element.id)) drawElement(ctx, element, true, this.state.camera.zoom, this.state.dark);
+  }
+
+  private drawPaperFrames(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.lineWidth = 1 / this.state.camera.zoom; ctx.strokeStyle = this.state.dark ? '#748477' : '#91a08e';
+    for (const page of this.scene.query(this.viewport()).filter(el => el.kind === 'paper')) {
+      const b = elementBounds(page); ctx.strokeRect(b.x, b.y, b.w, b.h);
+    }
+    ctx.restore();
   }
 
   private drawGrid(ctx: CanvasRenderingContext2D): void {

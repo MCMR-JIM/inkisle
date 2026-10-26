@@ -1,4 +1,20 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import type { BoardDocument } from '../../src/core/model';
+
+export async function createBoard(page: Page, layout: 'infinite' | 'single' | 'double' = 'infinite'): Promise<void> {
+  await page.locator('#quick-new').click();
+  if (layout !== 'infinite') await selectValue(page, '#new-board-layout', layout);
+  await page.locator('#confirm-new-board').click();
+  await expect(page.locator('#new-board-dialog')).toBeHidden();
+}
+
+export async function readBoard(page: Page): Promise<BoardDocument> {
+  await expect(page.locator('#save-status[data-state="saved"]')).toBeVisible();
+  return page.evaluate(async () => {
+    const path = '/src/storage/repository.ts'; const { Repository } = await import(/* @vite-ignore */ path);
+    const repo = new Repository(); const doc = await repo.load(localStorage.getItem('liubai:last-board')); repo.close(); return doc!;
+  });
+}
 
 export async function selectValue(page: Page, selector: string, value: string | number): Promise<void> {
   const trigger = page.locator(selector);

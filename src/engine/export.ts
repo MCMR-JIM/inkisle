@@ -5,6 +5,7 @@ import { shapeVertices } from '../core/paths';
 import { rotationCenter } from '../core/transforms';
 import { inkSVG, smoothInk } from '../core/ink';
 import { arrowHeadKinds, isLinearElement } from '../core/linear';
+import { preparePaper, withoutPaperRequests } from './paper-render';
 
 export function downloadBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
@@ -36,13 +37,14 @@ export async function exportPNG(doc: BoardDocument, elements = doc.elements, opt
   const ctx = canvas.getContext('2d')!;
   if (!options.transparent) { ctx.fillStyle = doc.background; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   ctx.scale(scale, scale); ctx.translate(padding - b.x, padding - b.y);
-  for (const el of elements) drawElement(ctx, el);
+  for (const el of elements) { await preparePaper(el, scale); drawElement(ctx, el, false, scale); }
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片导出失败')), 'image/png'));
 }
 
 const esc = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function exportSVG(doc: BoardDocument, elements = doc.elements, options: ExportOptions = {}): Blob {
+  if (elements.some(el => el.kind === 'paper' && el.paper?.sourceId)) throw new Error('包含 PDF 原页时请导出 PDF 或 PNG，SVG 适用于白板对象');
   const b = unionBounds(elements);
   if (!b) throw new Error('画板还是空的，先写下第一个想法吧');
   const padding = options.padding ?? 40;
@@ -104,7 +106,8 @@ export function exportSVG(doc: BoardDocument, elements = doc.elements, options: 
         const angle = Math.atan2(start ? -el.h : el.h, start ? -el.w : el.w), length = Math.max(12, el.strokeWidth * 4);
         parts.push(`<path d="M${tip.x - length * Math.cos(angle - Math.PI / 6)} ${tip.y - length * Math.sin(angle - Math.PI / 6)}L${tip.x} ${tip.y}L${tip.x - length * Math.cos(angle + Math.PI / 6)} ${tip.y - length * Math.sin(angle + Math.PI / 6)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" fill="none" stroke-linecap="round"/>`);
       }
-    } else if (el.kind === 'image') parts.push(`<image x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" href="${esc(el.src!)}" preserveAspectRatio="none"/>`);
+    } else if (el.kind === 'paper') parts.push(`<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="0" fill="#ffffff"/>`);
+    else if (el.kind === 'image') parts.push(`<image x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" href="${esc(el.src!)}" preserveAspectRatio="none"/>`);
     else if (el.kind !== 'text') parts.push(`<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="${el.kind === 'rect' ? 0 : el.kind === 'note' ? 3 : Math.min(el.radius, box.w / 2, box.h / 2)}" ${el.kind === 'note' ? `fill="${el.fill}"` : attrs}/>`);
     if (el.text) {
       measure.font = `${el.fontSize}px ${CANVAS_FONT}`;
@@ -132,6 +135,6 @@ export function thumbnail(elements: BoardElement[]): string | undefined {
   ctx.fillStyle = '#f8f9f6'; ctx.fillRect(0, 0, 420, 240);
   const scale = Math.min(380 / Math.max(b.w, 1), 200 / Math.max(b.h, 1), 1);
   ctx.translate((420 - b.w * scale) / 2, (240 - b.h * scale) / 2); ctx.scale(scale, scale); ctx.translate(-b.x, -b.y);
-  for (const el of elements) drawElement(ctx, el);
+  withoutPaperRequests(() => { for (const el of elements) drawElement(ctx, el, false, scale); });
   return canvas.toDataURL('image/webp', 0.6);
 }

@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool, contextAction } from './helpers';
+import { createBoard, chooseTool, contextAction } from './helpers';
 
 async function blank(page: Page) {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
 }
 
 const active = (page: Page, property = 'stroke') => page.locator(`#${property}-colors [aria-pressed="true"]`).getAttribute('data-color');

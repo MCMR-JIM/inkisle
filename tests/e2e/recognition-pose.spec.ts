@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTool } from './helpers';
+import { createBoard, chooseTool } from './helpers';
 import { roundedRectangleTrace, sampledEllipse, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import type { BoardElement, Point } from '../../src/core/model';
 import { objectRotationHandle, selectionFrame } from '../../src/core/selection-frame';
 import { rotationCenter, worldPoint } from '../../src/core/transforms';
 
 async function drawRecognition(page: Page, trace: Point[]): Promise<BoardElement> {
-  await page.goto('/'); await page.getByRole('button', { name: '新建画板', exact: true }).first().click();
+  await page.goto('/'); await createBoard(page);
   await chooseTool(page, '轨迹识别');
   await page.mouse.move(trace[0].x, trace[0].y); await page.mouse.down();
   for (const point of trace.slice(1)) await page.mouse.move(point.x, point.y);

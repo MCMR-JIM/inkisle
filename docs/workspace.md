@@ -39,7 +39,11 @@ Selecting **Eraser** or pressing **E** opens a size slider with a live value. It
 
 ## Board library
 
+New boards can start as an infinite canvas, a single-column paper layout, or a two-column paper layout, with an optional initial PDF. Paper layouts start with one blank sheet when no document is selected. PDFs imported later are added to the current board. See [PDF and paper](pdf.md) for page boundaries, layouts, and export.
+
 Unnamed empty boards stay in memory and do not enter the library. Adding content or giving a board a name starts automatic saving; named empty boards are kept. Undoing or deleting all content from an unnamed board removes its stored copy, while redo can restore it. New boards open without a welcome notification.
+
+Add paper from the drawing toolbar. Page navigation appears in the lower-left corner when sheets exist; undo, redo, and keyboard settings are in the top bar.
 
 Search by board name, sort by recent edit or name, edit names directly on cards, and duplicate entire boards. A board copy has independent elements and groups. Renaming and copying finish before switching or deleting a board.
 
