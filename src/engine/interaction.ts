@@ -14,6 +14,7 @@ import { PressureSampler, pressureValue } from '../core/pressure';
 import { InkSampler } from '../core/ink';
 import { inScope, selectionUnits, selectedUnits } from '../core/groups';
 import { eraserRadius, normalizeEraserSize, wheelEraserSize } from '../core/eraser';
+import { removeErasedParts } from './visibility';
 
 export interface InteractionHost {
   renderer: Renderer;
@@ -368,11 +369,13 @@ export class Interaction {
       const scene = this.r.scene;
       const transaction = scene.apply(sources.map<Change>(el => ({ id: el.id, after: el })), '局部擦除');
       if (transaction) {
-        const job = this.cutter.cut(sources, Math.max(.01, Math.min(.2, .2 / this.r.state.camera.zoom))).then(result => {
+        const job = this.cutter.cut(sources, Math.max(.01, Math.min(.2, .2 / this.r.state.camera.zoom)))
+          .catch(() => sources.map(source => [source]))
+          .then(removeErasedParts).then(result => {
           const replacements = result.map((parts, i) => ({ source: sources[i], parts }));
           scene.refine(transaction, replacements);
           if (scene === this.r.scene) this.host.onSelection();
-        }).catch(() => { /* Committed local masks remain intact if the worker is unavailable. */ });
+        }).catch(() => { /* Retain committed masks if visibility verification cannot finish. */ });
         this.pendingCuts.add(job); void job.finally(() => this.pendingCuts.delete(job));
       }
     } else if (g.type === 'pan' || g.type === 'pinch') this.host.onCamera();

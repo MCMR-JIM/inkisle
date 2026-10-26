@@ -6,7 +6,7 @@ export class Cutter {
   private sequence = 0;
   private pending = new Map<number, { resolve: (parts: BoardElement[][]) => void; reject: (error: Error) => void }>();
 
-  cut(elements: BoardElement[], tolerance: number): Promise<BoardElement[][]> {
+  async cut(elements: BoardElement[], tolerance: number): Promise<BoardElement[][]> {
     if (!elements.length) return Promise.resolve([]);
     if (!this.worker) {
       this.worker = new Worker(new URL('./cutter.worker.ts', import.meta.url), { type: 'module' });
