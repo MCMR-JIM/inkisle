@@ -24,7 +24,7 @@ Built with TypeScript and Canvas 2D, with no account or backend required. Boards
 - **调色与样式**：可编辑预设、HSV 色盘、HEX 输入、画布吸管，以及独立的描边、填充和填充开关。
 - **本地画板库**：创建、命名、搜索、排序和复制多个画板，自动保存内容、视角与个人设置；未命名的空画板不占用画板库。
 - **图片导出**：PNG / SVG 可选整板或选区、透明或画板背景及留白，PNG 支持 1–4 倍分辨率。
-- **PDF and paper**: Import selected pages, annotate paper and its margins, switch between one-column and two-column layouts, and export within fixed page boundaries.
+- **PDF and paper**: Import selected pages with an orientation preview, preserve portrait and landscape pages, rotate pages with their annotations, switch between one-column and two-column layouts, and export within fixed page boundaries.
 - **Desktop tools**: Light/dark themes and configurable keyboard shortcuts.
 - **Region capture**: Drag a rectangle or click polygon vertices to flatten visible layers, including PDF pages, into an independent image. Close polygons at their first vertex or with Enter; Backspace removes a vertex. Copy the region or insert it in place without changing the originals.
 

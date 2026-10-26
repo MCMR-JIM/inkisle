@@ -40,7 +40,7 @@ export interface BoardElement extends Bounds {
   /** Stable group ancestry, ordered from the outermost to the innermost group. */
   groupPath?: string[];
   /** Fixed paper plus export margin. PDF bytes live once in the asset store. */
-  paper?: { margin: number; sourceId?: string; sourcePage?: number };
+  paper?: { margin: number; sourceId?: string; sourcePage?: number; sourceRotation?: number };
 }
 
 export interface BoardDocument {

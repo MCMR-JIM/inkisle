@@ -1,20 +1,40 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { createBoard, chooseTool, contextAction, selectValue } from './helpers';
 import { roundedRectangleTrace, skewedRectangleTrace } from '../fixtures/recognition-traces';
 import { decodeDocument } from '../../src/core/codec';
 import { PDFDocument } from 'pdf-lib';
 import { pdfFixture } from '../fixtures/pdf';
+import { orientationFixture } from '../fixtures/pdf-orientation';
+
+async function downloadBoard(page: Page) {
+  const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const file = await pending;
+  const { readFile } = await import('node:fs/promises'); const bytes = await readFile((await file.path())!);
+  if (bytes.subarray(0, 4).toString() !== 'INKB') return decodeDocument(bytes);
+  const size = bytes.readUInt32LE(4), manifest = JSON.parse(bytes.subarray(8, 8 + size).toString());
+  return decodeDocument(bytes.subarray(8 + size, 8 + size + manifest.documentBytes));
+}
+
+test('production PDF orientation preview, page rotation and landscape export survive reload', async ({ page }) => {
+  await page.goto('/'); await createBoard(page);
+  await page.locator('#import-file').setInputFiles({ name: 'orientation.pdf', mimeType: 'application/pdf', buffer: await orientationFixture() });
+  await selectValue(page, '#pdf-import-orientation-angle', 90);
+  await expect.poll(() => page.locator('#pdf-import-orientation-canvas').evaluate((c: HTMLCanvasElement) => !c.hidden && c.width > c.height)).toBe(true);
+  await page.locator('#pdf-confirm-import').click();
+  expect((await downloadBoard(page)).elements.map(p => p.w > p.h)).toEqual([true, false, false]);
+  await page.locator('#pdf-rotate-left').click(); expect((await downloadBoard(page)).elements[0].paper!.sourceRotation).toBe(0);
+  await page.keyboard.press('Control+z'); await page.reload(); await expect(page.locator('#pdf-navigation')).toBeVisible();
+  expect((await downloadBoard(page)).elements[0].paper!.sourceRotation).toBe(90);
+  await page.locator('#export-button').click(); await page.locator('[data-action="export-pdf"]').click(); await page.locator('#pdf-export-range').fill('1');
+  const pending = page.waitForEvent('download'); await page.locator('#pdf-confirm-export').click(); const file = await pending;
+  const { readFile } = await import('node:fs/promises'); const doc = await PDFDocument.load(await readFile((await file.path())!));
+  expect(doc.getPage(0).getWidth()).toBeGreaterThan(doc.getPage(0).getHeight());
+});
 
 test('production region capture flattens PDF content into an independent image through keyboard actions', async ({ page }) => {
   await page.goto('/'); await createBoard(page);
   await page.locator('#import-file').setInputFiles({ name: 'capture.pdf', mimeType: 'application/pdf', buffer: await pdfFixture(1) });
   await page.locator('#pdf-confirm-import').click(); await expect(page.locator('#pdf-page-total')).toHaveText('/ 1');
-  const snapshot = async () => {
-    const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const file = await pending;
-    const { readFile } = await import('node:fs/promises'); const bytes = await readFile((await file.path())!);
-    const size = bytes.readUInt32LE(4), manifest = JSON.parse(bytes.subarray(8, 8 + size).toString());
-    return decodeDocument(bytes.subarray(8 + size, 8 + size + manifest.documentBytes));
-  };
+  const snapshot = () => downloadBoard(page);
   const before = await snapshot(), paper = before.elements[0], camera = before.camera;
   const a = { x: paper.x * camera.zoom + camera.x + 10, y: paper.y * camera.zoom + camera.y + 10 };
   const b = { x: (paper.x + paper.w) * camera.zoom + camera.x - 10, y: (paper.y + paper.h) * camera.zoom + camera.y - 10 };

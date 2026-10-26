@@ -1,6 +1,7 @@
 import { createElement, type BoardDocument, type BoardElement, type Bounds, type Change, type PageLayout } from './model';
 import { containsBounds, elementBounds, unionBounds } from './geometry';
 import { selectionUnits } from './groups';
+import { normalizeAngle, rotatePoint, rotationCenter } from './transforms';
 
 export type PaperLayout = Exclude<PageLayout, 'infinite'>;
 export const PAPER_GAP = 40;
@@ -67,6 +68,31 @@ export function paperLayoutChanges(elements: BoardElement[], layout: PaperLayout
 export function fitPaperSource(page: BoardElement, width: number, height: number): Bounds {
   const scale = Math.min(page.w / width, page.h / height);
   return { x: page.x + (page.w - width * scale) / 2, y: page.y + (page.h - height * scale) / 2, w: width * scale, h: height * scale };
+}
+
+export function paperRotation(degrees: number): number { return ((degrees % 360) + 360) % 360; }
+
+/** Rotate paper and its owned annotations together, then restore disjoint page frames. */
+export function rotatePaperChanges(elements: BoardElement[], id: string, direction: -1 | 1, layout: PaperLayout): Change[] {
+  const page = paperPages(elements).find(p => p.id === id); if (!page) return [];
+  const { owners, overflow } = paperAssignments(elements);
+  if (overflow.length) throw new Error('有对象超出纸张外框，请移回或删除后再旋转页面');
+  const angle = direction * Math.PI / 2, center = rotationCenter(page);
+  const turned = elements.map(el => {
+    if (el.id === id) return { ...el, w: el.h, h: el.w, paper: { ...el.paper!, ...(el.paper?.sourceId ? { sourceRotation: paperRotation((el.paper.sourceRotation ?? 0) + direction * 90) } : {}) } };
+    if (owners.get(el.id)?.id !== id) return el;
+    const own = rotationCenter(el), moved = rotatePoint(own, center, angle);
+    return { ...el, x: el.x + moved.x - own.x + (page.h - page.w) / 2, y: el.y + moved.y - own.y + (page.w - page.h) / 2, rotation: normalizeAngle(el.rotation + angle) };
+  });
+  const pages = paperPages(elements), origin = { x: Math.min(...pages.map(p => elementBounds(p).x)), y: Math.min(...pages.map(p => elementBounds(p).y)) };
+  const before = new Map(turned.map(el => [el.id, el]));
+  const positioned = new Map(paperPositions(paperPages(turned), layout, origin).map(p => [p.id, p]));
+  return turned.flatMap((el, i) => {
+    const owner = owners.get(el.id), paper = positioned.get(el.id);
+    const after = paper ?? (owner ? { ...el, x: el.x + positioned.get(owner.id)!.x - before.get(owner.id)!.x, y: el.y + positioned.get(owner.id)!.y - before.get(owner.id)!.y } : el);
+    const original = elements[i];
+    return after.x === original.x && after.y === original.y && after.w === original.w && after.h === original.h && after.rotation === original.rotation && after.paper?.sourceRotation === original.paper?.sourceRotation ? [] : [{ id: el.id, after }];
+  });
 }
 
 export function parsePageRange(value: string, count: number, limit = 5000): number[] {
